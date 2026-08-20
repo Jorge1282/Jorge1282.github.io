@@ -1609,7 +1609,7 @@ function renderResumen(totals, breakdown){
   html += '      <div class="balance-equal-value" style="color:' + (parcialVES>=0?'var(--teal)':'var(--coral)') + '">' + fmt(parcialVES,'VES') + '</div>';
   html += '    </div>';
   html += '  </div>';
-  html += '  <div class="saldo-note">Saldo total (' + fmt(saldo.usd,'USD') + ') menos tu ahorro apartado (' + fmt(ahorroApartado.usd||0,'USD') + ')</div>';
+  html += '  <div class="saldo-note">Saldo Total (' + fmt(saldo.usd,'USD') + ') Menos tu Ahorro Apartado (' + fmt(ahorroApartado.usd||0,'USD') + ')</div>';
   html += '</div>';
 
   html += '<div class="balance-card">';
@@ -1625,11 +1625,11 @@ function renderResumen(totals, breakdown){
   html += '      <div class="balance-equal-value" style="color:' + (closingVES>=0?'var(--gold)':'var(--coral)') + '">' + fmt(closingVES,'VES') + '</div>';
   html += '    </div>';
   html += '  </div>';
-  html += '  <div class="saldo-note"><span class="saldo-note-line">Saldo inicial: ' + fmt(opening.usd,'USD') + ' / ' + fmt(opening.ves,'VES') + '</span><span class="saldo-note-line">+ mes actual: <span class="mes-actual-value" style="color:' + (balanceUSD>=0?'var(--teal)':'var(--coral)') + '">' + fmt(balanceUSD,'USD') + '</span> / <span class="mes-actual-value" style="color:' + (balanceVES>=0?'var(--teal)':'var(--coral)') + '">' + fmt(balanceVES,'VES') + '</span></span></div>';
+  html += '  <div class="saldo-note"><span class="saldo-note-line">Saldo Inicial: ' + fmt(opening.usd,'USD') + ' / ' + fmt(opening.ves,'VES') + '</span><span class="saldo-note-line">+ Mes Actual: <span class="mes-actual-value" style="color:' + (balanceUSD>=0?'var(--teal)':'var(--coral)') + '">' + fmt(balanceUSD,'USD') + '</span> / <span class="mes-actual-value" style="color:' + (balanceVES>=0?'var(--teal)':'var(--coral)') + '">' + fmt(balanceVES,'VES') + '</span></span></div>';
   if (state.bcvRate.usd){
     var dailyRows = getDailyBalances();
     var lastRow = dailyRows[dailyRows.length - 1];
-    if (lastRow) html += '  <div class="balance-combined">Total combinado (tasa de cada día): <strong>' + fmt(lastRow.balanceCombined,'USD') + '</strong></div>';
+    if (lastRow) html += '  <div class="balance-combined">Total Combinado (Tasa de Cada Día): <strong>' + fmt(lastRow.balanceCombined,'USD') + '</strong></div>';
   }
   html += '</div>';
 
@@ -1638,7 +1638,7 @@ function renderResumen(totals, breakdown){
   var gastosCatKey = 'resumen-gastoscat';
   var gastosCatExpanded = isGroupExpanded(gastosCatKey, -1);
   html += '<button class="group-header group-header-btn" onclick="toggleGroup(\'' + gastosCatKey + '\',-1)">';
-  html += '  <span class="group-title-wrap"><span class="group-chevron ' + (gastosCatExpanded?'open':'') + '">' + ICONS.chevronDown + '</span><span class="group-title">Gastos por categoría</span></span>';
+  html += '  <span class="group-title-wrap"><span class="group-chevron ' + (gastosCatExpanded?'open':'') + '">' + ICONS.chevronDown + '</span><span class="group-title">Gastos Mes</span></span>';
   html += '  <span class="group-net" style="color:var(--gold);font-weight:700">' + breakdown.length + ' categoría' + (breakdown.length===1?'':'s') + '</span>';
   html += '</button>';
   if (!gastosCatExpanded){
@@ -1670,8 +1670,8 @@ function renderResumen(totals, breakdown){
 
 function renderMovimientos(monthTx){
   var html = '<div class="segmented" style="margin-bottom:16px">';
-  html += '  <button class="segment-btn ' + (state.movGroupBy==='semana'?'active-gold':'') + '" onclick="setMovGroupBy(\'semana\')">Por semana</button>';
-  html += '  <button class="segment-btn ' + (state.movGroupBy==='categoria'?'active-gold':'') + '" onclick="setMovGroupBy(\'categoria\')">Por categoría</button>';
+  html += '  <button class="segment-btn ' + (state.movGroupBy==='semana'?'active-gold':'') + '" onclick="setMovGroupBy(\'semana\')">Por Semana</button>';
+  html += '  <button class="segment-btn ' + (state.movGroupBy==='categoria'?'active-gold':'') + '" onclick="setMovGroupBy(\'categoria\')">Por Categoría</button>';
   html += '</div>';
 
   if (monthTx.length === 0){
@@ -1795,9 +1795,9 @@ function renderGoalRingCard(label, saved, totalTarget, currency, startAmt, goalI
   html += '  <div class="goal-ring-body">';
   html += '    <div class="goal-ring-label">' + esc(label) + '</div>';
   html += '    <div class="goal-ring-numbers" style="color:' + amountColor + '">' + (isNegative ? '− ' : '+ ') + fmt(saved, currency) + '</div>';
-  html += '    <div class="goal-ring-of">' + (totalTarget > 0 ? ('meta total: ' + fmt(totalTarget, currency)) : 'sin meta definida') + '</div>';
+  html += '    <div class="goal-ring-of">' + (totalTarget > 0 ? ('Meta Total: ' + fmt(totalTarget, currency)) : 'Sin Meta Definida') + '</div>';
   if (startAmt !== undefined && goalIncrement !== undefined && goalIncrement > 0){
-    html += '    <div class="goal-ring-of">' + fmt(startAmt, currency) + ' + ' + fmt(goalIncrement, currency) + ' nuevos = ' + fmt(startAmt + goalIncrement, currency) + '</div>';
+    html += '    <div class="goal-ring-of">' + fmt(startAmt, currency) + ' + ' + fmt(goalIncrement, currency) + ' Nuevos = ' + fmt(startAmt + goalIncrement, currency) + '</div>';
   }
   html += '  </div>';
   html += '</div>';
@@ -1837,10 +1837,10 @@ function renderAhorroForm(period){
   var metaTotalVes = st.ves + g.ves;
   var html = '<div class="section-label" style="margin-top:22px">Ajustar mi ahorro</div>';
   html += '<div class="ahorro-form-card">';
-  html += '  <div class="ahorro-form-row"><label class="form-label">Ahorro actual (total)</label><div class="form-row"><input class="input" type="number" inputmode="decimal" placeholder="$" id="ahorroCurrentUsd_' + period + '" value="' + (s.usd||'') + '"><input class="input" type="number" inputmode="decimal" placeholder="Bs." id="ahorroCurrentVes_' + period + '" value="' + (s.ves||'') + '"></div></div>';
-  html += '  <div class="ahorro-form-row"><label class="form-label">Cuánto MÁS quieres ahorrar</label><div class="form-row"><input class="input" type="number" inputmode="decimal" placeholder="$" id="ahorroGoalUsd_' + period + '" value="' + (g.usd||'') + '"><input class="input" type="number" inputmode="decimal" placeholder="Bs." id="ahorroGoalVes_' + period + '" value="' + (g.ves||'') + '"></div></div>';
+  html += '  <div class="ahorro-form-row"><label class="form-label">Ahorro Actual (total)</label><div class="form-row"><input class="input" type="number" inputmode="decimal" placeholder="$" id="ahorroCurrentUsd_' + period + '" value="' + (s.usd||'') + '"><input class="input" type="number" inputmode="decimal" placeholder="Bs." id="ahorroCurrentVes_' + period + '" value="' + (s.ves||'') + '"></div></div>';
+  html += '  <div class="ahorro-form-row"><label class="form-label">Cuánto MÁS quieres Ahorrar</label><div class="form-row"><input class="input" type="number" inputmode="decimal" placeholder="$" id="ahorroGoalUsd_' + period + '" value="' + (g.usd||'') + '"><input class="input" type="number" inputmode="decimal" placeholder="Bs." id="ahorroGoalVes_' + period + '" value="' + (g.ves||'') + '"></div></div>';
   if (metaTotalUsd > 0 || metaTotalVes > 0){
-    html += '  <div class="ahorro-meta-total">Deberías tener ' + (metaTotalUsd>0?fmt(metaTotalUsd,'USD'):'') + (metaTotalUsd>0&&metaTotalVes>0?' + ':'') + (metaTotalVes>0?fmt(metaTotalVes,'VES'):'') + ' ahorrado a fin de período</div>';
+    html += '  <div class="ahorro-meta-total">Deberías Tener ' + (metaTotalUsd>0?fmt(metaTotalUsd,'USD'):'') + (metaTotalUsd>0&&metaTotalVes>0?' + ':'') + (metaTotalVes>0?fmt(metaTotalVes,'VES'):'') + ' Ahorrado a Fin de Período</div>';
   }
   html += '  <button class="primary-btn" onclick="saveAhorroCompleto(\'' + period + '\')">Guardar</button>';
   html += '</div>';
@@ -1855,8 +1855,8 @@ function renderMetasMensual(totals){
   var totalTargetVES = st.ves + g.ves;
 
   var html = '<div class="section-label">Meta de ahorro del mes</div>';
-  html += renderGoalRingCard('Ahorro actual (USD)', s.usd, totalTargetUSD, 'USD', st.usd, g.usd);
-  html += renderGoalRingCard('Ahorro actual (Bs.)', s.ves, totalTargetVES, 'VES', st.ves, g.ves);
+  html += renderGoalRingCard('Ahorro Actual (USD)', s.usd, totalTargetUSD, 'USD', st.usd, g.usd);
+  html += renderGoalRingCard('Ahorro Actual (Bs.)', s.ves, totalTargetVES, 'VES', st.ves, g.ves);
   html += renderAhorroForm('monthly');
   return html;
 }
@@ -1874,8 +1874,8 @@ function renderMetasSemanal(monthTx){
   var otherWeeks = weeks.filter(function(w){ return w.start !== todayMonday; });
 
   var html = '<div class="section-label">Esta semana (' + currentWeekLabel + ')</div>';
-  html += renderGoalRingCard('Ahorro actual (USD)', s.usd, totalTargetUSD, 'USD', st.usd, g.usd);
-  html += renderGoalRingCard('Ahorro actual (Bs.)', s.ves, totalTargetVES, 'VES', st.ves, g.ves);
+  html += renderGoalRingCard('Ahorro Actual (USD)', s.usd, totalTargetUSD, 'USD', st.usd, g.usd);
+  html += renderGoalRingCard('Ahorro Actual (Bs.)', s.ves, totalTargetVES, 'VES', st.ves, g.ves);
   html += renderAhorroForm('weekly');
 
   html += '<div class="section-label" style="margin-top:22px">Semanas anteriores (ingresos − egresos)</div>';
@@ -1957,7 +1957,7 @@ function renderMetasDiario(){
 }
 
 function renderPresupuesto(){
-  var html = '<div class="section-label" style="margin-top:26px">Presupuesto por categoría</div>';
+  var html = '<div class="section-label" style="margin-top:26px">Presupuesto</div>';
   html += '<div class="empty-note" style="padding-top:0">Define un límite mensual por categoría, en Bs. o en $. Si lo pones en $, la app muestra el equivalente en Bs. a la tasa de hoy — el % de cumplimiento siempre se calcula en la moneda original, no se mezcla.</div>';
   EXPENSE_CATEGORIES.forEach(function(c){
     var b = state.budgets[c.id] || { usd: 0, ves: 0 };
@@ -1995,7 +1995,7 @@ function renderSeguridad(){
 }
 
 function renderRespaldo(){
-  var html = '<div class="section-label" style="margin-top:26px">Respaldo de datos</div>';
+  var html = '<div class="section-label" style="margin-top:26px">Respaldo de Datos</div>';
   html += '<div class="empty-note" style="padding-top:0">Descarga una copia de tus movimientos, por si algún día necesitas recuperarlos. Elige el formato que prefieras.</div>';
 
   html += '<div class="export-option">';
@@ -2005,7 +2005,7 @@ function renderRespaldo(){
   html += '</div>';
 
   html += '<div class="export-option">';
-  html += '  <div class="export-option-title">Respaldo técnico completo</div>';
+  html += '  <div class="export-option-title">Respaldo Técnico Completo</div>';
   html += '  <div class="export-option-desc">Archivo JSON con todo: movimientos, metas, presupuestos, saldo inicial. Para restaurar todo exacto si algo se pierde.</div>';
   html += '  <button class="primary-btn" style="background:var(--surface-2);color:var(--gold);border:1px solid var(--gold)" onclick="exportJSON()">Descargar respaldo (JSON)</button>';
   html += '</div>';
@@ -2033,10 +2033,10 @@ function renderMetasBack(title, target){
 
 function renderAjustesHome(){
   var html = '<div class="section-label">Ajustes</div>';
-  html += renderMetasMenuCard(ICONS.grid, 'Presupuesto por categoría', 'Límites de gasto con alertas', 'presupuesto', 'ajustes');
-  html += renderMetasMenuCard(ICONS.wallet, 'Seguridad', state.pinHash ? 'PIN activo' : 'Sin PIN configurado', 'seguridad', 'ajustes');
-  html += renderMetasMenuCard(ICONS.calendar, 'Respaldo de datos', 'Exportar a CSV o JSON', 'respaldo', 'ajustes');
-  html += renderMetasMenuCard(ICONS.wallet2, 'Saldo inicial y datos importados', 'Punto de partida y carga de agosto', 'saldo', 'ajustes');
+  html += renderMetasMenuCard(ICONS.grid, 'Presupuesto Mensual', 'Límites de Gasto con Alertas', 'presupuesto', 'ajustes');
+  html += renderMetasMenuCard(ICONS.wallet, 'Seguridad', state.pinHash ? 'PIN activo' : 'Sin PIN Configurado', 'seguridad', 'ajustes');
+  html += renderMetasMenuCard(ICONS.calendar, 'Respaldo de Datos', 'Exportar a CSV o JSON', 'respaldo', 'ajustes');
+  html += renderMetasMenuCard(ICONS.wallet2, 'Saldo Inicial y Datos Importados', 'Punto de Partida y Carga de Agosto', 'saldo', 'ajustes');
   return html;
 }
 
@@ -2053,9 +2053,9 @@ function renderNotificationBanner(){
     html += '  <div class="goal-row"><span>🔕 No disponible aquí</span></div>';
     html += '  <div class="goal-numbers">Este navegador no soporta notificaciones. Prueba desde la app instalada.</div>';
   } else {
-    html += '  <div class="goal-row"><span>🔔 Activar notificaciones</span></div>';
+    html += '  <div class="goal-row"><span>🔔 Activar Notificaciones</span></div>';
     html += '  <div class="goal-numbers">Recibe un aviso en el celular cuando un pago esté por vencer.</div>';
-    html += '  <button class="primary-btn" style="margin-top:10px" onclick="requestNotificationPermission()">Activar notificaciones</button>';
+    html += '  <button class="primary-btn" style="margin-top:10px" onclick="requestNotificationPermission()">Activar Notificaciones</button>';
   }
   html += '</div>';
   return html;
@@ -2127,14 +2127,14 @@ function renderPagos(){
         html += '</div>';
       }
 
-      html += '<div class="sheet-title" style="font-size:13px;margin-bottom:8px">' + (editItem ? 'Editar fecha' : 'Agregar fecha') + '</div>';
-      html += '<div class="form-group"><label class="form-label">Fecha de pago</label><input class="input" type="date" id="payDate_' + catId + '" value="' + (editItem ? esc(editItem.date) : '') + '"></div>';
+      html += '<div class="sheet-title" style="font-size:13px;margin-bottom:8px">' + (editItem ? 'Editar fecha' : 'Agregar Fecha') + '</div>';
+      html += '<div class="form-group"><label class="form-label">Fecha de Pago</label><input class="input" type="date" id="payDate_' + catId + '" value="' + (editItem ? esc(editItem.date) : '') + '"></div>';
       html += '<div class="form-group"><label class="form-label">Nota (opcional)</label><input class="input" type="text" id="payNote_' + catId + '" placeholder="Ej. Cuota 2 de 3" value="' + (editItem ? esc(editItem.note||'') : '') + '"></div>';
       html += '<div class="form-row">';
       html += '  <div class="form-group" style="flex:1"><label class="form-label">Monto (opcional)</label><input class="input" type="number" inputmode="decimal" id="payAmount_' + catId + '" value="' + (editItem && editItem.amount ? editItem.amount : '') + '"></div>';
       html += '  <div class="form-group" style="width:90px"><label class="form-label">Moneda</label><select class="input" id="payCurrency_' + catId + '"><option value="USD" ' + (!editItem||editItem.currency==='USD'?'selected':'') + '>$</option><option value="VES" ' + (editItem&&editItem.currency==='VES'?'selected':'') + '>Bs.</option></select></div>';
       html += '</div>';
-      html += '<button class="primary-btn" onclick="addPaymentDate(\'' + catId + '\')">' + (editItem ? 'Guardar cambios' : 'Agregar fecha') + '</button>';
+      html += '<button class="primary-btn" onclick="addPaymentDate(\'' + catId + '\')">' + (editItem ? 'Guardar cambios' : 'Agregar Fecha') + '</button>';
       if (editItem) html += '<button class="primary-btn" style="background:var(--surface-2);color:var(--text-dim);border:1px solid var(--line);margin-top:8px" onclick="cancelEditPayment()">Cancelar edición</button>';
       html += '<div style="height:14px"></div>';
     }
@@ -2151,10 +2151,10 @@ function renderAjustes(){
 }
 
 function renderMetasAjustes(){
-  var html = '<div class="section-label">Saldo inicial</div>';
+  var html = '<div class="section-label">Saldo Inicial</div>';
   html += '<div class="empty-note" style="padding-top:0">El punto de partida antes de tu primer movimiento registrado. Ajusta aquí si tu saldo actual no coincide con lo que tienes en la mano o en el banco.</div>';
-  html += '<div class="form-group"><label class="form-label">Saldo inicial en USD</label><input class="input" type="number" inputmode="decimal" id="balUsdInput" value="' + state.initialBalance.usd + '"></div>';
-  html += '<div class="form-group"><label class="form-label">Saldo inicial en Bs.</label><input class="input" type="number" inputmode="decimal" id="balVesInput" value="' + state.initialBalance.ves + '"></div>';
+  html += '<div class="form-group"><label class="form-label">Saldo Inicial en USD</label><input class="input" type="number" inputmode="decimal" id="balUsdInput" value="' + state.initialBalance.usd + '"></div>';
+  html += '<div class="form-group"><label class="form-label">Saldo Inicial en Bs.</label><input class="input" type="number" inputmode="decimal" id="balVesInput" value="' + state.initialBalance.ves + '"></div>';
   html += '<button class="primary-btn" onclick="saveInitialBalance(document.getElementById(\'balUsdInput\').value, document.getElementById(\'balVesInput\').value)">Guardar saldo inicial</button>';
 
   html += '<div class="section-label" style="margin-top:26px">Importar datos existentes</div>';
@@ -2177,7 +2177,7 @@ function renderFormSheet(){
   html += '<div class="sheet-overlay" onclick="closeForm()">';
   html += '  <div class="sheet" onclick="event.stopPropagation()">';
   html += '    <div class="sheet-handle"></div>';
-  html += '    <div class="sheet-header"><span class="sheet-title">' + (isEditing ? 'Editar movimiento' : 'Nuevo movimiento') + '</span><button class="icon-btn" onclick="closeForm()">' + ICONS.x + '</button></div>';
+  html += '    <div class="sheet-header"><span class="sheet-title">' + (isEditing ? 'Editar movimiento' : 'Nuevo Movimiento') + '</span><button class="icon-btn" onclick="closeForm()">' + ICONS.x + '</button></div>';
 
   html += '    <div class="segmented">';
   html += '      <button class="segment-btn ' + (f.type==='egreso'?'active-coral':'') + '" onclick="setFormType(\'egreso\')">Egreso</button>';
