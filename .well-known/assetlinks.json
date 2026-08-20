@@ -1,8 +1,26 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "io.github.jorge1282.twa",
-        "sha256_cert_fingerprints": ["8E:5D:BC:CA:6C:05:05:27:56:D7:FF:9A:59:29:1A:CC:10:25:8F:5A:5C:6C:98:CB:02:D3:F3:4B:FB:34:44:6A"]
-      }
-    }]
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.jorge1282.twa",
+      "sha256_cert_fingerprints": [
+        "8E:5D:BC:CA:6C:05:05:27:56:D7:FF:9A:59:29:1A:CC:10:25:8F:5A:5C:6C:98:CB:02:D3:F3:4B:FB:34:44:6A"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.jorge1282.mibolsilloapp.twa",
+      "sha256_cert_fingerprints": [
+        "CD:A3:4E:06:08:D0:CA:95:B0:03:E6:E7:95:DE:B3:C3:39:52:D7:30:A9:16:CA:1C:59:3D:5C:58:AC:59:74:D9"
+      ]
+    }
+  }
+]
