@@ -2356,7 +2356,7 @@ function renderCategoriasAjustes(){
   var html = '<div class="section-label">Categorías de Egreso</div>';
   html += '<div class="empty-note" style="padding-top:0">Las predeterminadas no se pueden eliminar. Agrega las tuyas cuando quieras — se guardan y se sincronizan igual que el resto de tus datos.</div>';
   DEFAULT_EXPENSE_CATEGORIES.forEach(function(c){
-    html += '<div class="form-row" style="align-items:center;margin-bottom:8px"><span style="flex:1;font-size:13.5px">' + esc(c.label) + '</span><span style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px">Predeterminada</span></div>';
+    html += '<div class="form-row" style="align-items:center;margin-bottom:8px"><span style="flex:1;font-size:13.5px">' + esc(c.label) + '</span></div>';
   });
   (state.customCategories.expense || []).forEach(function(c){
     var isEditing = state.editingCategory && state.editingCategory.type === 'egreso' && state.editingCategory.id === c.id;
@@ -2377,7 +2377,7 @@ function renderCategoriasAjustes(){
 
   html += '<div class="section-label" style="margin-top:26px">Categorías de Ingreso</div>';
   DEFAULT_INCOME_CATEGORIES.forEach(function(c){
-    html += '<div class="form-row" style="align-items:center;margin-bottom:8px"><span style="flex:1;font-size:13.5px">' + esc(c.label) + '</span><span style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px">Predeterminada</span></div>';
+    html += '<div class="form-row" style="align-items:center;margin-bottom:8px"><span style="flex:1;font-size:13.5px">' + esc(c.label) + '</span></div>';
   });
   (state.customCategories.income || []).forEach(function(c){
     var isEditingInc = state.editingCategory && state.editingCategory.type === 'ingreso' && state.editingCategory.id === c.id;
