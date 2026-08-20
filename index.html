@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<meta name="apple-mobile-web-app-title" content="Tu Bolsillo">
-<meta name="description" content="Tu Bolsillo — finanzas y contabilidad familiar en Bs. y USD, con tasa BCV del día.">
-<title>Tu Bolsillo</title>
+<meta name="apple-mobile-web-app-title" content="Mi Bolsillo App">
+<meta name="description" content="Mi Bolsillo App — finanzas y contabilidad familiar en Bs. y USD, con tasa BCV del día.">
+<title>Mi Bolsillo App</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12201A">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1524,7 +1524,7 @@ function esc(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</
 function renderLockScreen(){
   var html = '<div class="lock-screen">';
   html += '  <div class="lock-icon" style="color:var(--gold)">' + ICONS.wallet2 + '</div>';
-  html += '  <div class="wordmark" style="font-size:28px;margin-top:14px">Tu Bolsillo</div>';
+  html += '  <div class="wordmark" style="font-size:28px;margin-top:14px">Mi Bolsillo App</div>';
   html += '  <div class="lock-sub">Ingresa el PIN familiar</div>';
   html += '  <input class="input lock-input" type="password" inputmode="numeric" maxlength="6" id="pinInput" placeholder="••••" value="' + esc(state.pinInput||'') + '" oninput="setPinInput(this.value)" onkeyup="if(event.key===\'Enter\') submitPin()">';
   if (state.pinError) html += '<div class="lock-error">PIN incorrecto, intenta de nuevo.</div>';
@@ -1549,7 +1549,7 @@ function render(){
 
   var html = '';
   html += '<div class="header">';
-  html += '  <div><div class="wordmark">Tu Bolsillo</div></div>';
+  html += '  <div><div class="wordmark">Mi Bolsillo App</div></div>';
   html += '  <div style="display:flex;align-items:center;gap:8px">' + renderSyncBadge() + '<span style="color:var(--gold)">' + ICONS.wallet2 + '</span></div>';
   html += '</div>';
 
