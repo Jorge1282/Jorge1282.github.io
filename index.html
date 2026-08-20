@@ -253,6 +253,11 @@ var INCOME_CATEGORIES = [
 ];
 var ALL_CATEGORIES = EXPENSE_CATEGORIES.concat(INCOME_CATEGORIES);
 var PAYMENT_CATEGORIES = ['arriendo','colegio','condominio','servicios','cashea','krece','ubii','credito_jorge','credito_sheila'];
+var PAYMENT_PERSONS = [{id:'jorge',label:'Jorge',color:'var(--teal)'},{id:'sheila',label:'Sheila',color:'var(--coral)'}];
+function personLabel(id){
+  var p = PAYMENT_PERSONS.find(function(x){ return x.id === id; });
+  return p ? p.label : '';
+}
 function catLabel(id){
   for (var i=0;i<ALL_CATEGORIES.length;i++){ if (ALL_CATEGORIES[i].id===id) return ALL_CATEGORIES[i].label; }
   return 'Otro';
@@ -341,7 +346,7 @@ var AUGUST_2026_SEED = {
   ]
 };
 
-var MONTHS_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+var MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 var DAYS_ES = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 var DAYS_ES_FULL = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 var STORAGE_KEY = 'ff_data_v1';
@@ -550,17 +555,19 @@ function addPaymentDate(catId){
   var note = (document.getElementById('payNote_' + catId).value || '').trim();
   var amount = Number(document.getElementById('payAmount_' + catId).value) || 0;
   var currency = document.getElementById('payCurrency_' + catId).value;
+  var personEl = document.getElementById('payPerson_' + catId);
+  var person = personEl ? personEl.value : '';
 
   if (state.editingPayment && state.editingPayment.catId === catId){
     var list = state.paymentCommitments[catId] || [];
     var item = list.find(function(p){ return p.id === state.editingPayment.id; });
     if (item){
-      item.date = date; item.note = note; item.amount = amount; item.currency = currency;
+      item.date = date; item.note = note; item.amount = amount; item.currency = currency; item.person = person;
     }
     state.editingPayment = null;
   } else {
     if (!state.paymentCommitments[catId]) state.paymentCommitments[catId] = [];
-    state.paymentCommitments[catId].push({ id: uid(), date: date, note: note, amount: amount, currency: currency, paid: false });
+    state.paymentCommitments[catId].push({ id: uid(), date: date, note: note, amount: amount, currency: currency, person: person, paid: false });
   }
   savePaymentsToStorage();
   pushToCloud();
@@ -597,7 +604,7 @@ function getUpcomingPayments(){
     (state.paymentCommitments[catId] || []).forEach(function(p){
       if (p.paid) return;
       var diffDays = Math.round((new Date(p.date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
-      list.push({ catId: catId, label: catLabel(catId), date: p.date, note: p.note, amount: p.amount, currency: p.currency, diffDays: diffDays, id: p.id });
+      list.push({ catId: catId, label: catLabel(catId), date: p.date, note: p.note, person: p.person, amount: p.amount, currency: p.currency, diffDays: diffDays, id: p.id });
     });
   });
   list.sort(function(a,b){ return a.diffDays - b.diffDays; });
@@ -647,6 +654,7 @@ function checkAndNotifyPayments(force){
       if (p.diffDays < 0) bodyParts.push('Venció hace ' + Math.abs(p.diffDays) + ' día(s)');
       else if (p.diffDays === 0) bodyParts.push('Vence hoy');
       else bodyParts.push('Vence en ' + p.diffDays + ' día(s), el ' + formatDayMonthShort(p.date));
+      if (p.person) bodyParts.push(personLabel(p.person));
       if (p.note) bodyParts.push(p.note);
       if (p.amount) bodyParts.push(fmt(p.amount, p.currency || 'VES'));
       reg.showNotification(title, {
@@ -1072,6 +1080,14 @@ function mondayOf(dateStr){
 function formatDayMonthShort(dateStr){
   var d = new Date(dateStr + 'T00:00:00');
   return pad2(d.getDate()) + ' ' + MONTHS_ES[d.getMonth()].slice(0,3);
+}
+function monthKeyFromDate(dateStr){
+  var d = new Date(dateStr + 'T00:00:00');
+  return d.getFullYear() + '-' + pad2(d.getMonth()+1);
+}
+function monthLabelFromKey(key){
+  var parts = key.split('-');
+  return MONTHS_ES[Number(parts[1])-1] + ' ' + parts[0];
 }
 function groupTxByWeek(txs){
   var map = {};
@@ -1559,7 +1575,7 @@ function renderPaymentAlerts(){
           : ('Vence en ' + p.diffDays + ' días');
         html += '<div class="tx-row">';
         html += '  <span class="tx-dot" style="background:' + pColor + '"></span>';
-        html += '  <div style="flex:1;min-width:0"><div class="tx-label">' + esc(formatDayMonthShort(p.date)) + (p.note?(' · '+esc(p.note)):'') + '</div></div>';
+        html += '  <div style="flex:1;min-width:0"><div class="tx-label">' + esc(formatDayMonthShort(p.date)) + (p.person?(' · <span style="color:' + (PAYMENT_PERSONS.find(function(x){return x.id===p.person;})||{color:'inherit'}).color + ';font-weight:600">' + esc(personLabel(p.person)) + '</span>'):'') + (p.note?(' · '+esc(p.note)):'') + '</div></div>';
         html += '  <div style="text-align:right;font-family:var(--font-mono);font-size:11px;font-weight:700;color:' + pColor + '">' + pText + (p.amount ? ('<div style="font-size:10.5px;color:var(--text-faint);font-weight:400">' + fmt(p.amount,p.currency||'VES') + budgetEquivalentInline(p.amount, p.currency||'VES') + '</div>') : '') + '</div>';
         html += '</div>';
       });
@@ -1597,7 +1613,7 @@ function renderResumen(totals, breakdown){
   var parcialUSD = saldo.usd - (ahorroApartado.usd || 0);
   var parcialVES = saldo.ves - (ahorroApartado.ves || 0);
   html += '<div class="saldo-card" style="border-color:rgba(111,169,141,0.35);background:linear-gradient(135deg, rgba(111,169,141,0.12), var(--surface-2))">';
-  html += '  <div class="balance-line"><span>Saldo Parcial (disponible)</span><span style="color:var(--teal)">' + ICONS.wallet + '</span></div>';
+  html += '  <div class="balance-line"><span>Saldo Parcial (Disponible)</span><span style="color:var(--teal)">' + ICONS.wallet + '</span></div>';
   html += '  <div class="balance-equal-row">';
   html += '    <div class="balance-equal-col">';
   html += '      <div class="balance-equal-label">USD</div>';
@@ -1639,7 +1655,7 @@ function renderResumen(totals, breakdown){
   var gastosCatExpanded = isGroupExpanded(gastosCatKey, -1);
   html += '<button class="group-header group-header-btn" onclick="toggleGroup(\'' + gastosCatKey + '\',-1)">';
   html += '  <span class="group-title-wrap"><span class="group-chevron ' + (gastosCatExpanded?'open':'') + '">' + ICONS.chevronDown + '</span><span class="group-title">Gastos Mes</span></span>';
-  html += '  <span class="group-net" style="color:var(--gold);font-weight:700">' + breakdown.length + ' categoría' + (breakdown.length===1?'':'s') + '</span>';
+  html += '  <span class="group-net" style="color:var(--gold);font-weight:700">' + breakdown.length + ' Categoría' + (breakdown.length===1?'':'s') + '</span>';
   html += '</button>';
   if (!gastosCatExpanded){
     return html;
@@ -1957,8 +1973,22 @@ function renderMetasDiario(){
 }
 
 function renderPresupuesto(){
-  var html = '<div class="section-label" style="margin-top:26px">Presupuesto</div>';
+  var html = '<div class="section-label" style="margin-top:26px">Presupuesto por Categoria</div>';
   html += '<div class="empty-note" style="padding-top:0">Define un límite mensual por categoría, en Bs. o en $. Si lo pones en $, la app muestra el equivalente en Bs. a la tasa de hoy — el % de cumplimiento siempre se calcula en la moneda original, no se mezcla.</div>';
+
+  var totalUSD = 0, totalVES = 0;
+  EXPENSE_CATEGORIES.forEach(function(c){
+    var b = state.budgets[c.id] || { usd: 0, ves: 0 };
+    totalUSD += Number(b.usd) || 0;
+    totalVES += Number(b.ves) || 0;
+  });
+  if (totalUSD > 0 || totalVES > 0){
+    html += '<div class="goal-card" style="margin-bottom:18px">';
+    html += '  <div class="goal-row"><span>Total de Presupuesto</span></div>';
+    html += '  <div class="goal-numbers" style="font-size:14px;font-weight:700;color:var(--gold)">' + (totalUSD>0?fmt(totalUSD,'USD'):'') + (totalUSD>0&&totalVES>0?' + ':'') + (totalVES>0?fmt(totalVES,'VES'):'') + '</div>';
+    html += '</div>';
+  }
+
   EXPENSE_CATEGORIES.forEach(function(c){
     var b = state.budgets[c.id] || { usd: 0, ves: 0 };
     html += '<div class="form-group"><label class="form-label">' + esc(c.label) + '</label>';
@@ -2067,16 +2097,71 @@ function renderPagos(){
   html += renderNotificationBanner();
 
   var grandUSD = 0, grandVES = 0;
+  var byMonth = {}; // key -> {usd, ves}
+  var byPerson = {}; // id -> {usd, ves}
+  var byMonthPerson = {}; // monthKey -> personId -> {usd, ves}
   PAYMENT_CATEGORIES.forEach(function(catId){
     (state.paymentCommitments[catId] || []).forEach(function(p){
-      if (p.currency === 'USD') grandUSD += Number(p.amount)||0; else grandVES += Number(p.amount)||0;
+      var amt = Number(p.amount) || 0;
+      if (p.currency === 'USD') grandUSD += amt; else grandVES += amt;
+
+      if (p.date){
+        var mk = monthKeyFromDate(p.date);
+        if (!byMonth[mk]) byMonth[mk] = { usd: 0, ves: 0 };
+        if (p.currency === 'USD') byMonth[mk].usd += amt; else byMonth[mk].ves += amt;
+
+        if (p.person){
+          if (!byMonthPerson[mk]) byMonthPerson[mk] = {};
+          if (!byMonthPerson[mk][p.person]) byMonthPerson[mk][p.person] = { usd: 0, ves: 0 };
+          if (p.currency === 'USD') byMonthPerson[mk][p.person].usd += amt; else byMonthPerson[mk][p.person].ves += amt;
+        }
+      }
+      if (p.person){
+        if (!byPerson[p.person]) byPerson[p.person] = { usd: 0, ves: 0 };
+        if (p.currency === 'USD') byPerson[p.person].usd += amt; else byPerson[p.person].ves += amt;
+      }
     });
   });
+
   if (grandUSD > 0 || grandVES > 0){
-    html += '<div class="goal-card" style="margin-bottom:18px">';
+    var monthKeys = Object.keys(byMonth).sort();
+    if (monthKeys.length){
+      html += '<div class="section-label" style="margin-top:0">Por mes</div>';
+      monthKeys.forEach(function(mk){
+        var m = byMonth[mk];
+        html += '<div class="goal-card" style="margin-bottom:8px">';
+        html += '  <div class="goal-row"><span>Total de Pago ' + esc(monthLabelFromKey(mk)) + '</span></div>';
+        html += '  <div class="goal-numbers" style="font-size:13px;font-weight:700;color:var(--gold)">' + (m.usd>0?fmt(m.usd,'USD'):'') + (m.usd>0&&m.ves>0?' + ':'') + (m.ves>0?fmt(m.ves,'VES'):'') + '</div>';
+        var mp = byMonthPerson[mk];
+        if (mp){
+          PAYMENT_PERSONS.forEach(function(per){
+            var pm = mp[per.id];
+            if (!pm || (pm.usd<=0 && pm.ves<=0)) return;
+            html += '  <div class="budget-note" style="margin-top:4px"><span style="color:' + per.color + ';font-weight:600">' + esc(per.label) + '</span>: ' + (pm.usd>0?fmt(pm.usd,'USD'):'') + (pm.usd>0&&pm.ves>0?' + ':'') + (pm.ves>0?fmt(pm.ves,'VES'):'') + '</div>';
+          });
+        }
+        html += '</div>';
+      });
+    }
+
+    html += '<div class="goal-card" style="margin-bottom:12px">';
     html += '  <div class="goal-row"><span>Total de Pagos</span></div>';
     html += '  <div class="goal-numbers" style="font-size:14px;font-weight:700;color:var(--gold)">' + (grandUSD>0?fmt(grandUSD,'USD'):'') + (grandUSD>0&&grandVES>0?' + ':'') + (grandVES>0?fmt(grandVES,'VES'):'') + '</div>';
     html += '</div>';
+
+    var personIds = PAYMENT_PERSONS.map(function(p){ return p.id; }).filter(function(id){ return byPerson[id]; });
+    if (personIds.length){
+      html += '<div class="section-label" style="margin-top:4px">Por persona</div>';
+      personIds.forEach(function(id){
+        var m = byPerson[id];
+        var perDef = PAYMENT_PERSONS.find(function(p){ return p.id === id; });
+        html += '<div class="goal-card" style="margin-bottom:8px;border-left:3px solid ' + perDef.color + '">';
+        html += '  <div class="goal-row"><span style="color:' + perDef.color + ';font-weight:700">Total de Pago ' + esc(personLabel(id)) + '</span></div>';
+        html += '  <div class="goal-numbers" style="font-size:13px;font-weight:700;color:var(--gold)">' + (m.usd>0?fmt(m.usd,'USD'):'') + (m.usd>0&&m.ves>0?' + ':'') + (m.ves>0?fmt(m.ves,'VES'):'') + '</div>';
+        html += '</div>';
+      });
+      html += '<div style="height:6px"></div>';
+    }
   }
 
   var sortedCategories = PAYMENT_CATEGORIES.slice().sort(function(a, b){
@@ -2118,7 +2203,7 @@ function renderPagos(){
           var isEditing = editing && editing.id === p.id;
           html += '<div class="tx-row" style="' + (isEditing ? 'border:1px solid var(--gold)' : '') + '">';
           html += '  <span class="tx-dot" style="background:' + (p.paid?'var(--teal)':'var(--coral)') + '"></span>';
-          html += '  <div style="flex:1;min-width:0"><div class="tx-label">' + esc(formatDayMonthShort(p.date)) + (p.note ? (' · ' + esc(p.note)) : '') + '</div>' + (p.amount ? ('<div class="tx-date">' + fmt(p.amount, p.currency||'VES') + budgetEquivalentInline(p.amount, p.currency||'VES') + '</div>') : '') + '</div>';
+          html += '  <div style="flex:1;min-width:0"><div class="tx-label">' + esc(formatDayMonthShort(p.date)) + (p.person ? (' · <span style="color:' + (PAYMENT_PERSONS.find(function(x){return x.id===p.person;})||{color:'inherit'}).color + ';font-weight:600">' + esc(personLabel(p.person)) + '</span>') : '') + (p.note ? (' · ' + esc(p.note)) : '') + '</div>' + (p.amount ? ('<div class="tx-date">' + fmt(p.amount, p.currency||'VES') + budgetEquivalentInline(p.amount, p.currency||'VES') + '</div>') : '') + '</div>';
           html += '  <button class="trash-btn" style="width:auto;padding:4px 8px;font-family:var(--font-mono);font-size:10px;color:' + (p.paid?'var(--teal)':'var(--coral)') + '" onclick="togglePaymentPaid(\'' + catId + '\',\'' + p.id + '\')">' + (p.paid?'Pagado':'Pendiente') + '</button>';
           html += '  <button class="trash-btn" onclick="editPaymentDate(\'' + catId + '\',\'' + p.id + '\')" title="Editar">' + ICONS.edit + '</button>';
           html += '  <button class="trash-btn" onclick="deletePaymentDate(\'' + catId + '\',\'' + p.id + '\')" title="Eliminar">' + ICONS.trash + '</button>';
@@ -2129,6 +2214,11 @@ function renderPagos(){
 
       html += '<div class="sheet-title" style="font-size:13px;margin-bottom:8px">' + (editItem ? 'Editar fecha' : 'Agregar Fecha') + '</div>';
       html += '<div class="form-group"><label class="form-label">Fecha de Pago</label><input class="input" type="date" id="payDate_' + catId + '" value="' + (editItem ? esc(editItem.date) : '') + '"></div>';
+      html += '<div class="form-group"><label class="form-label">Persona (opcional)</label><select class="input" id="payPerson_' + catId + '"><option value="">Sin asignar</option>';
+      PAYMENT_PERSONS.forEach(function(per){
+        html += '<option value="' + per.id + '" ' + (editItem && editItem.person===per.id ? 'selected' : '') + '>' + esc(per.label) + '</option>';
+      });
+      html += '</select></div>';
       html += '<div class="form-group"><label class="form-label">Nota (opcional)</label><input class="input" type="text" id="payNote_' + catId + '" placeholder="Ej. Cuota 2 de 3" value="' + (editItem ? esc(editItem.note||'') : '') + '"></div>';
       html += '<div class="form-row">';
       html += '  <div class="form-group" style="flex:1"><label class="form-label">Monto (opcional)</label><input class="input" type="number" inputmode="decimal" id="payAmount_' + catId + '" value="' + (editItem && editItem.amount ? editItem.amount : '') + '"></div>';
