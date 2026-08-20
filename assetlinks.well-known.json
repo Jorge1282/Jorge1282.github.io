@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.netlify.resonant_hotteok_92737e.twa",
+        "sha256_cert_fingerprints": ["83:DF:5D:93:C0:F0:75:57:51:3D:1A:4E:FE:DD:20:BF:82:E1:9F:09:DB:F4:0F:6D:DC:EC:32:64:81:2A:7A:87"]
+      }
+    }]
