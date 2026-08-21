@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="apple-mobile-web-app-title" content="Tu Bolsillo App">
-<meta name="description" content="Tu Bolsillo App — finanzas y contabilidad familiar en Bs. y USD, con tasa BCV del día.">
+<meta name="description" content="Tu Bolsillo App — finanzas y contabilidad personal en Bs. y USD, con tasa BCV del día. Tus datos se guardan solo en tu teléfono.">
 <title>Tu Bolsillo App</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12201A">
@@ -13,8 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     --ink: #12201A;
@@ -198,10 +197,16 @@
   svg { display: block; }
 
   .lock-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px; text-align: center; }
-  .lock-sub { font-size: 13px; color: var(--text-dim); margin-top: 8px; margin-bottom: 22px; }
-  .lock-input { text-align: center; font-size: 22px; letter-spacing: 8px; max-width: 200px; font-family: var(--font-mono); }
-  .lock-error { color: var(--coral); font-size: 12px; margin-top: 10px; }
-  .lock-btn { max-width: 200px; margin-top: 18px; }
+  .lock-sub { font-size: 13px; color: var(--text-dim); margin-top: 8px; margin-bottom: 24px; max-width: 280px; line-height: 1.5; }
+  .auth-card { width: 100%; max-width: 280px; }
+  .auth-field { text-align: left; margin-bottom: 12px; }
+  .auth-field label { display: block; font-size: 10.5px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-faint); margin-bottom: 5px; }
+  .auth-input { width: 100%; text-align: left; font-size: 15px; letter-spacing: normal; font-family: var(--font-body); }
+  .lock-error { color: var(--coral); font-size: 12px; margin-top: 4px; text-align: left; }
+  .lock-btn { max-width: 280px; margin-top: 6px; }
+  .auth-note { margin-top: 20px; max-width: 280px; text-align: left; background: var(--surface-2); border: 1px solid rgba(201,162,75,0.3); border-radius: 10px; padding: 12px 14px; }
+  .auth-note-title { display: block; font-size: 10.5px; letter-spacing: 0.6px; text-transform: uppercase; color: var(--gold); font-weight: 700; margin-bottom: 5px; }
+  .auth-note-body { font-size: 11.5px; color: var(--text-dim); line-height: 1.55; }
 </style>
 </head>
 <body>
@@ -209,59 +214,34 @@
 
 <script>
 /* ---------- data ---------- */
-/* ====== CONFIGURACIÓN DE SINCRONIZACIÓN FAMILIAR (Firebase) ======
-   1) Reemplaza FIREBASE_CONFIG con el bloque que copiaste de la consola de Firebase.
-   2) Escribe el mismo FAMILY_CODE en el celular de cada miembro de la familia.
-   3) Si dejas FIREBASE_CONFIG sin llenar, la app sigue funcionando normal,
-      pero solo guarda los datos en este dispositivo (sin sincronizar). */
-var FIREBASE_CONFIG = {
-  apiKey: "AIzaSyBZ2RHaAeI63wW4rLO4Uvpk3q5VzRObOAI",
-  authDomain: "glowing-icon-370518.firebaseapp.com",
-  projectId: "glowing-icon-370518",
-  storageBucket: "glowing-icon-370518.firebasestorage.app",
-  messagingSenderId: "68767776517",
-  appId: "1:68767776517:web:b424c02fa3bd3a5006816c"
-};
-var FAMILY_CODE = "FAMILIAOSORIO";
-/* ================================================================= */
+/* Esta versión guarda todo localmente por defecto (localStorage del dispositivo),
+   protegido por el usuario/contraseña que cada persona crea en su propio teléfono.
+   Además, cada persona puede conectar SU PROPIA cuenta de Google (opcional) para
+   guardar un respaldo en SU Google Drive personal — nunca en un servidor de esta app. */
 
-var DEFAULT_EXPENSE_CATEGORIES = [
-  {id:'alimentos', label:'Alimentos'},
-  {id:'arriendo', label:'Arriendo'},
-  {id:'salud', label:'Salud'},
-  {id:'condominio', label:'Condominio'},
-  {id:'servicios', label:'Servicios'},
-  {id:'colegio', label:'Colegio'},
-  {id:'combustible', label:'Combustible Moto'},
-  {id:'mantenimiento', label:'Mantenimiento Moto'},
-  {id:'telefono', label:'Recarga Teléfono'},
-  {id:'cashea', label:'Cashea'},
-  {id:'krece', label:'Krece'},
-  {id:'ubii', label:'Ubii App'},
-  {id:'credito_jorge', label:'Crédito Jorge'},
-  {id:'credito_sheila', label:'Crédito Sheila'},
-  {id:'salida', label:'Salida Familiar'},
-  {id:'personal_hijos', label:'Gastos Hijos'},
-  {id:'personal_sheila', label:'Gastos Sheila'},
-  {id:'personal_jorge', label:'Gastos Jorge'},
-  {id:'otro', label:'Otro'}
-];
-var DEFAULT_INCOME_CATEGORIES = [
-  {id:'ingreso_diario', label:'Ingreso Diario'},
-  {id:'sueldo', label:'Sueldo'},
-  {id:'otro_ingreso', label:'Otro Ingreso'}
-];
-/* Categorías personalizadas: se agregan en tiempo real y se guardan/sincronizan
-   junto con el resto de los datos. EXPENSE_CATEGORIES / INCOME_CATEGORIES / ALL_CATEGORIES
-   se recalculan con rebuildCategoryLists() cada vez que cambian. */
+/* ====== RESPALDO EN GOOGLE DRIVE (opcional) ======
+   1) Creá un OAuth Client ID tipo "Web application" en:
+      https://console.cloud.google.com/apis/credentials
+   2) Agregá tu dominio (ej. https://jorge1282.github.io) en "Authorized JavaScript origins".
+   3) Reemplazá GOOGLE_CLIENT_ID abajo con el Client ID que te dieron.
+   Si dejás el valor de ejemplo (empieza con "TU_"), el botón de Drive queda oculto
+   y la app sigue funcionando 100% local igual que antes. */
+var GOOGLE_CLIENT_ID = 'TU_CLIENT_ID.apps.googleusercontent.com';
+var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
+var DRIVE_BACKUP_FILENAME = 'mi-bolsillo-app-respaldo.json';
+/* =================================================== */
+
+var DEFAULT_EXPENSE_CATEGORIES = [];
+var DEFAULT_INCOME_CATEGORIES = [];
+/* Categorías 100% personalizadas: no hay predeterminadas en esta versión.
+   Cada persona crea las suyas en tiempo real. EXPENSE_CATEGORIES / INCOME_CATEGORIES /
+   ALL_CATEGORIES se recalculan con rebuildCategoryLists() cada vez que cambian. */
 var EXPENSE_CATEGORIES = DEFAULT_EXPENSE_CATEGORIES.slice();
 var INCOME_CATEGORIES = DEFAULT_INCOME_CATEGORIES.slice();
 var ALL_CATEGORIES = EXPENSE_CATEGORIES.concat(INCOME_CATEGORIES);
-var PAYMENT_CATEGORIES = ['arriendo','colegio','condominio','servicios','cashea','krece','ubii','credito_jorge','credito_sheila'];
-var PAYMENT_PERSONS = [{id:'jorge',label:'Jorge',color:'var(--teal)'},{id:'sheila',label:'Sheila',color:'var(--coral)'}];
-function personLabel(id){
-  var p = PAYMENT_PERSONS.find(function(x){ return x.id === id; });
-  return p ? p.label : '';
+function getPaymentCategories(){
+  /* En esta versión, cualquier categoría de egreso puede tener compromisos de pago. */
+  return EXPENSE_CATEGORIES.map(function(c){ return c.id; });
 }
 function catLabel(id){
   for (var i=0;i<ALL_CATEGORIES.length;i++){ if (ALL_CATEGORIES[i].id===id) return ALL_CATEGORIES[i].label; }
@@ -331,103 +311,20 @@ function saveEditCategory(type, id){
   render();
 }
 
-/* ---------- seed data: Agosto 2026, importado desde "Ingresos y Egresos Mes Agosto 2026" ---------- */
-var AUGUST_2026_SEED = {
-  initialBalance: { usd: 842, ves: 163526 },
-  transactions: [
-    {type:'egreso',category:'alimentos',amount:32590,currency:'VES',date:'2026-08-01'},
-    {type:'egreso',category:'alimentos',amount:24000,currency:'VES',date:'2026-08-02'},
-    {type:'egreso',category:'cashea',amount:31497,currency:'VES',date:'2026-08-01'},
-    {type:'ingreso',category:'ingreso_diario',amount:600,currency:'USD',date:'2026-08-02',note:'Agregado semanal (ver hoja original)'},
-    {type:'egreso',category:'personal_sheila',amount:1280,currency:'USD',date:'2026-08-02',note:'Agregado semanal (ver hoja original)'},
-
-    {type:'ingreso',category:'ingreso_diario',amount:52000,currency:'VES',date:'2026-08-03'},
-    {type:'ingreso',category:'ingreso_diario',amount:2760,currency:'VES',date:'2026-08-04'},
-    {type:'ingreso',category:'ingreso_diario',amount:2967,currency:'VES',date:'2026-08-05'},
-    {type:'ingreso',category:'ingreso_diario',amount:8791,currency:'VES',date:'2026-08-06'},
-    {type:'ingreso',category:'ingreso_diario',amount:3813,currency:'VES',date:'2026-08-07'},
-    {type:'ingreso',category:'ingreso_diario',amount:23035,currency:'VES',date:'2026-08-08'},
-    {type:'ingreso',category:'ingreso_diario',amount:95,currency:'USD',date:'2026-08-09',note:'Agregado semanal (ver hoja original)'},
-    {type:'egreso',category:'alimentos',amount:18740,currency:'VES',date:'2026-08-03'},
-    {type:'egreso',category:'alimentos',amount:11244,currency:'VES',date:'2026-08-04'},
-    {type:'egreso',category:'alimentos',amount:3097,currency:'VES',date:'2026-08-05'},
-    {type:'egreso',category:'alimentos',amount:800,currency:'VES',date:'2026-08-06'},
-    {type:'egreso',category:'alimentos',amount:2422,currency:'VES',date:'2026-08-07'},
-    {type:'egreso',category:'alimentos',amount:2400,currency:'VES',date:'2026-08-08'},
-    {type:'egreso',category:'alimentos',amount:4393,currency:'VES',date:'2026-08-09'},
-    {type:'egreso',category:'servicios',amount:30158,currency:'VES',date:'2026-08-03'},
-    {type:'egreso',category:'servicios',amount:858,currency:'VES',date:'2026-08-07'},
-    {type:'egreso',category:'combustible',amount:3000,currency:'VES',date:'2026-08-03'},
-    {type:'egreso',category:'combustible',amount:2280,currency:'VES',date:'2026-08-07'},
-    {type:'egreso',category:'combustible',amount:2070,currency:'VES',date:'2026-08-08'},
-    {type:'egreso',category:'mantenimiento',amount:1000,currency:'VES',date:'2026-08-08'},
-    {type:'egreso',category:'cashea',amount:14129,currency:'VES',date:'2026-08-07'},
-    {type:'egreso',category:'cashea',amount:17200,currency:'VES',date:'2026-08-09'},
-    {type:'egreso',category:'personal_sheila',amount:2000,currency:'VES',date:'2026-08-04'},
-    {type:'egreso',category:'personal_jorge',amount:13243,currency:'VES',date:'2026-08-03'},
-    {type:'egreso',category:'personal_jorge',amount:5400,currency:'VES',date:'2026-08-04'},
-    {type:'egreso',category:'personal_jorge',amount:3500,currency:'VES',date:'2026-08-05'},
-    {type:'egreso',category:'personal_jorge',amount:300,currency:'VES',date:'2026-08-06'},
-    {type:'egreso',category:'personal_jorge',amount:3000,currency:'VES',date:'2026-08-07'},
-    {type:'egreso',category:'personal_jorge',amount:200,currency:'VES',date:'2026-08-08'},
-    {type:'egreso',category:'personal_jorge',amount:2700,currency:'VES',date:'2026-08-09'},
-    {type:'egreso',category:'personal_jorge',amount:5,currency:'USD',date:'2026-08-09',note:'Agregado semanal (ver hoja original)'},
-
-    {type:'ingreso',category:'ingreso_diario',amount:22175,currency:'VES',date:'2026-08-10'},
-    {type:'ingreso',category:'ingreso_diario',amount:591209,currency:'VES',date:'2026-08-13'},
-    {type:'ingreso',category:'ingreso_diario',amount:10980,currency:'VES',date:'2026-08-14'},
-    {type:'ingreso',category:'ingreso_diario',amount:8481,currency:'VES',date:'2026-08-15'},
-    {type:'ingreso',category:'ingreso_diario',amount:53000,currency:'VES',date:'2026-08-16'},
-    {type:'ingreso',category:'ingreso_diario',amount:94,currency:'USD',date:'2026-08-16',note:'Agregado semanal (ver hoja original)'},
-    {type:'egreso',category:'alimentos',amount:10446,currency:'VES',date:'2026-08-10'},
-    {type:'egreso',category:'alimentos',amount:6155,currency:'VES',date:'2026-08-11'},
-    {type:'egreso',category:'alimentos',amount:27260,currency:'VES',date:'2026-08-13'},
-    {type:'egreso',category:'alimentos',amount:3400,currency:'VES',date:'2026-08-14'},
-    {type:'egreso',category:'alimentos',amount:1900,currency:'VES',date:'2026-08-15'},
-    {type:'egreso',category:'alimentos',amount:35436,currency:'VES',date:'2026-08-16'},
-    {type:'egreso',category:'alimentos',amount:41,currency:'USD',date:'2026-08-16',note:'Agregado semanal (ver hoja original)'},
-    {type:'egreso',category:'condominio',amount:39314,currency:'VES',date:'2026-08-13'},
-    {type:'egreso',category:'servicios',amount:4631,currency:'VES',date:'2026-08-13'},
-    {type:'egreso',category:'colegio',amount:99692,currency:'VES',date:'2026-08-13'},
-    {type:'egreso',category:'colegio',amount:30843,currency:'VES',date:'2026-08-14'},
-    {type:'egreso',category:'colegio',amount:17844,currency:'VES',date:'2026-08-15'},
-    {type:'egreso',category:'combustible',amount:2850,currency:'VES',date:'2026-08-13'},
-    {type:'egreso',category:'mantenimiento',amount:15100,currency:'VES',date:'2026-08-10'},
-    {type:'egreso',category:'mantenimiento',amount:2048,currency:'VES',date:'2026-08-16'},
-    {type:'egreso',category:'cashea',amount:71789,currency:'VES',date:'2026-08-13'},
-    {type:'egreso',category:'salida',amount:20000,currency:'VES',date:'2026-08-15',note:'Día aproximado (formato irregular en hoja original)'},
-    {type:'egreso',category:'personal_sheila',amount:1500,currency:'VES',date:'2026-08-10'},
-    {type:'egreso',category:'personal_sheila',amount:181000,currency:'VES',date:'2026-08-13'},
-    {type:'egreso',category:'personal_sheila',amount:1436,currency:'VES',date:'2026-08-14'},
-    {type:'egreso',category:'personal_sheila',amount:40200,currency:'VES',date:'2026-08-15'},
-    {type:'ingreso',category:'personal_sheila',amount:275,currency:'USD',date:'2026-08-16',note:'Agregado semanal en USD, signo positivo en hoja original'},
-    {type:'egreso',category:'personal_jorge',amount:2150,currency:'VES',date:'2026-08-11'},
-    {type:'egreso',category:'personal_jorge',amount:29300,currency:'VES',date:'2026-08-13'},
-    {type:'egreso',category:'personal_jorge',amount:31500,currency:'VES',date:'2026-08-14'},
-    {type:'egreso',category:'personal_jorge',amount:12500,currency:'VES',date:'2026-08-16'},
-    {type:'egreso',category:'personal_jorge',amount:35,currency:'USD',date:'2026-08-16',note:'Agregado semanal (ver hoja original)'},
-
-    {type:'egreso',category:'alimentos',amount:3100,currency:'VES',date:'2026-08-17',note:'Corrección de categoría en hoja original (antes figuraba en Ingreso Diario)'},
-    {type:'ingreso',category:'ingreso_diario',amount:27000,currency:'VES',date:'2026-08-18'},
-    {type:'egreso',category:'telefono',amount:5520,currency:'VES',date:'2026-08-17'},
-    {type:'egreso',category:'personal_sheila',amount:8041,currency:'VES',date:'2026-08-17'}
-  ]
-};
-
 var MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 var DAYS_ES = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 var DAYS_ES_FULL = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-var STORAGE_KEY = 'ff_data_v1';
-var STORAGE_KEY_RATE = 'ff_bcv_rate_v1';
-var STORAGE_KEY_BALANCE = 'ff_initial_balance_v1';
-var STORAGE_KEY_HISTORY = 'ff_bcv_history_v1';
-var STORAGE_KEY_PIN = 'ff_pin_hash_v1';
-var STORAGE_KEY_BUDGETS = 'ff_budgets_v1';
-var STORAGE_KEY_PAYMENTS = 'ff_payments_v1';
-var STORAGE_KEY_SAVINGS = 'ff_savings_v1';
-var STORAGE_KEY_SAVINGS_START = 'ff_savings_start_v1';
-var STORAGE_KEY_NOTIFIED = 'ff_notified_log_v1';
-var STORAGE_KEY_CATEGORIES = 'ff_custom_categories_v1';
+var STORAGE_KEY = 'mibolsilloapp_data_v1';
+var STORAGE_KEY_RATE = 'mibolsilloapp_bcv_rate_v1';
+var STORAGE_KEY_BALANCE = 'mibolsilloapp_initial_balance_v1';
+var STORAGE_KEY_HISTORY = 'mibolsilloapp_bcv_history_v1';
+var STORAGE_KEY_BUDGETS = 'mibolsilloapp_budgets_v1';
+var STORAGE_KEY_PAYMENTS = 'mibolsilloapp_payments_v1';
+var STORAGE_KEY_SAVINGS = 'mibolsilloapp_savings_v1';
+var STORAGE_KEY_SAVINGS_START = 'mibolsilloapp_savings_start_v1';
+var STORAGE_KEY_NOTIFIED = 'mibolsilloapp_notified_log_v1';
+var STORAGE_KEY_CATEGORIES = 'mibolsilloapp_custom_categories_v1';
+var STORAGE_KEY_AUTH = 'mibolsilloapp_auth_v1';
 var BCV_ENDPOINTS = [
   'https://bcv.today/api/v1/rate.json',
   'https://cdn.jsdelivr.net/gh/grupoclip/bcv-api/api/v1/rate.json'
@@ -469,16 +366,24 @@ var state = {
   bcvHistory: {}, /* { 'YYYY-MM-DD': usdRate } */
   historyStatus: 'idle',
   initialBalance: { usd: 0, ves: 0 },
-  syncStatus: 'local', /* local | connecting | synced | error */
-  pinHash: null,
-  locked: false,
-  pinInput: '',
-  pinError: false,
+  syncStatus: 'local',
+  authMode: 'setup', /* 'setup' | 'login' */
+  authUsername: '',
+  authPassHash: '',
+  authInput: { username: '', password: '', password2: '' },
+  authError: '',
+  locked: true,
   budgets: {},
   paymentCommitments: {},
   customCategories: { expense: [], income: [] },
   showNewCategoryInput: false,
-  editingCategory: null
+  editingCategory: null,
+  driveStatus: 'disconnected', /* disconnected | connecting | connected | working | error */
+  driveEmail: null,
+  driveAccessToken: null,
+  driveTokenExpiry: 0,
+  driveFileId: null,
+  driveLastBackupAt: null
 };
 
 function loadData(){
@@ -536,47 +441,77 @@ function saveInitialBalance(usd, ves){
   pushToCloud();
 }
 
-/* ---------- seguridad (PIN) ---------- */
+/* ---------- seguridad (usuario y contraseña, 100% local) ---------- */
 function simpleHash(str){
   var hash = 5381;
   for (var i=0;i<str.length;i++){ hash = ((hash*33) ^ str.charCodeAt(i)) >>> 0; }
   return hash.toString(16);
 }
-function loadPin(){
+function loadAuth(){
   try {
-    var raw = localStorage.getItem(STORAGE_KEY_PIN);
-    if (raw){ state.pinHash = raw; state.locked = true; }
-  } catch(e){ console.error('pin load error', e); }
+    var raw = localStorage.getItem(STORAGE_KEY_AUTH);
+    if (raw){
+      var parsed = JSON.parse(raw);
+      state.authUsername = parsed.username || '';
+      state.authPassHash = parsed.passHash || '';
+      state.authMode = 'login';
+    } else {
+      state.authMode = 'setup';
+    }
+  } catch(e){ console.error('auth load error', e); state.authMode = 'setup'; }
+  state.locked = true;
 }
-function persistPin(){
-  try { localStorage.setItem(STORAGE_KEY_PIN, state.pinHash || ''); } catch(e){}
-  pushToCloud();
+function persistAuth(){
+  try { localStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify({ username: state.authUsername, passHash: state.authPassHash })); } catch(e){}
 }
-function setPinInput(v){ state.pinInput = v; state.pinError = false; render(); }
-function submitPin(){
-  if (state.pinInput && simpleHash(state.pinInput) === state.pinHash){
-    state.locked = false; state.pinInput = ''; state.pinError = false;
-    render();
+function setAuthField(field, value){ state.authInput[field] = value; state.authError = ''; }
+function submitSetup(){
+  var u = (state.authInput.username || '').trim();
+  var p = state.authInput.password || '';
+  var p2 = state.authInput.password2 || '';
+  if (!u){ state.authError = 'Escribe un nombre de usuario.'; render(); return; }
+  if (p.length < 4){ state.authError = 'La contraseña debe tener al menos 4 caracteres.'; render(); return; }
+  if (p !== p2){ state.authError = 'Las contraseñas no coinciden.'; render(); return; }
+  state.authUsername = u;
+  state.authPassHash = simpleHash(p);
+  state.authMode = 'login';
+  persistAuth();
+  state.locked = false;
+  state.authInput = { username: '', password: '', password2: '' };
+  state.authError = '';
+  render();
+}
+function submitLogin(){
+  var u = (state.authInput.username || '').trim();
+  var p = state.authInput.password || '';
+  if (u === state.authUsername && p && simpleHash(p) === state.authPassHash){
+    state.locked = false;
+    state.authInput = { username: '', password: '', password2: '' };
+    state.authError = '';
   } else {
-    state.pinError = true; state.pinInput = '';
-    render();
+    state.authError = 'Usuario o contraseña incorrectos.';
+    state.authInput.password = '';
   }
-}
-function changePin(){
-  var v = document.getElementById('newPinInput').value;
-  if (!/^\d{4,6}$/.test(v)){ window.alert('El PIN debe tener entre 4 y 6 números.'); return; }
-  state.pinHash = simpleHash(v);
-  persistPin();
-  render();
-  window.alert('PIN guardado. La próxima vez que se abra la app en este u otro celular de la familia, se pedirá este PIN.');
-}
-function removePinConfirm(){
-  if (!window.confirm('¿Quitar el PIN? Cualquiera con el link de la app podrá entrar sin código.')) return;
-  state.pinHash = null;
-  persistPin();
   render();
 }
-function lockNow(){ state.locked = true; state.pinInput = ''; render(); }
+function lockNow(){
+  state.locked = true;
+  state.authInput = { username: '', password: '', password2: '' };
+  state.authError = '';
+  render();
+}
+function changeAccountPassword(){
+  var cur = document.getElementById('curPassInput') ? document.getElementById('curPassInput').value : '';
+  var np = document.getElementById('newPassInput') ? document.getElementById('newPassInput').value : '';
+  var np2 = document.getElementById('newPassInput2') ? document.getElementById('newPassInput2').value : '';
+  if (simpleHash(cur) !== state.authPassHash){ window.alert('La contraseña actual no es correcta.'); return; }
+  if (np.length < 4){ window.alert('La nueva contraseña debe tener al menos 4 caracteres.'); return; }
+  if (np !== np2){ window.alert('Las contraseñas nuevas no coinciden.'); return; }
+  state.authPassHash = simpleHash(np);
+  persistAuth();
+  window.alert('Contraseña actualizada.');
+  render();
+}
 
 /* ---------- categorías personalizadas ---------- */
 function loadCustomCategories(){
@@ -687,7 +622,7 @@ function deletePaymentDate(catId, id){
 function getUpcomingPayments(){
   var today = todayStr();
   var list = [];
-  PAYMENT_CATEGORIES.forEach(function(catId){
+  getPaymentCategories().forEach(function(catId){
     (state.paymentCommitments[catId] || []).forEach(function(p){
       if (p.paid) return;
       var diffDays = Math.round((new Date(p.date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
@@ -741,7 +676,7 @@ function checkAndNotifyPayments(force){
       if (p.diffDays < 0) bodyParts.push('Venció hace ' + Math.abs(p.diffDays) + ' día(s)');
       else if (p.diffDays === 0) bodyParts.push('Vence hoy');
       else bodyParts.push('Vence en ' + p.diffDays + ' día(s), el ' + formatDayMonthShort(p.date));
-      if (p.person) bodyParts.push(personLabel(p.person));
+      if (p.person) bodyParts.push(p.person);
       if (p.note) bodyParts.push(p.note);
       if (p.amount) bodyParts.push(fmt(p.amount, p.currency || 'VES'));
       reg.showNotification(title, {
@@ -765,15 +700,193 @@ function downloadBlob(content, filename, mime){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-function exportJSON(){
-  var backup = {
+function buildFullBackup(){
+  return {
     exportedAt: new Date().toISOString(),
+    app: 'Tu Bolsillo App',
+    version: 1,
     transactions: state.transactions,
     goal: state.goal,
     budgets: state.budgets,
-    initialBalance: state.initialBalance
+    initialBalance: state.initialBalance,
+    paymentCommitments: state.paymentCommitments,
+    customCategories: state.customCategories,
+    currentSavings: state.currentSavings,
+    savingsStart: state.savingsStart
   };
-  downloadBlob(JSON.stringify(backup, null, 2), 'tu-bolsillo-respaldo-' + todayStr() + '.json', 'application/json;charset=utf-8;');
+}
+function exportJSON(){
+  var backup = buildFullBackup();
+  downloadBlob(JSON.stringify(backup, null, 2), 'mi-bolsillo-app-respaldo-' + todayStr() + '.json', 'application/json;charset=utf-8;');
+}
+
+/* ---------- respaldo en Google Drive (opcional, cuenta propia del usuario) ---------- */
+function isGoogleDriveConfigured(){
+  return GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID.indexOf('TU_') !== 0;
+}
+var googleTokenClient = null;
+function ensureGoogleTokenClient(){
+  if (googleTokenClient) return googleTokenClient;
+  if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) return null;
+  googleTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: DRIVE_SCOPE,
+    callback: function(){} /* se reasigna en cada llamada según lo que se esté haciendo */
+  });
+  return googleTokenClient;
+}
+function fetchGoogleUserEmail(){
+  fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+    headers: { Authorization: 'Bearer ' + state.driveAccessToken }
+  }).then(function(r){ return r.json(); }).then(function(d){
+    state.driveEmail = d.email || null;
+    render();
+  }).catch(function(){});
+}
+function connectGoogleDrive(){
+  if (!isGoogleDriveConfigured()){
+    window.alert('El respaldo en Google Drive todavía no está configurado en esta app.');
+    return;
+  }
+  var client = ensureGoogleTokenClient();
+  if (!client){ window.alert('No se pudo cargar Google. Revisa tu conexión a internet e intenta de nuevo.'); return; }
+  state.driveStatus = 'connecting';
+  render();
+  client.callback = function(resp){
+    if (resp.error){
+      state.driveStatus = 'error';
+      render();
+      window.alert('No se pudo conectar con Google Drive.');
+      return;
+    }
+    state.driveAccessToken = resp.access_token;
+    state.driveTokenExpiry = Date.now() + (Number(resp.expires_in) || 3600) * 1000 - 60000;
+    state.driveStatus = 'connected';
+    fetchGoogleUserEmail();
+    render();
+  };
+  client.requestAccessToken({ prompt: 'consent' });
+}
+function disconnectGoogleDrive(){
+  if (state.driveAccessToken && typeof google !== 'undefined' && google.accounts && google.accounts.oauth2){
+    try { google.accounts.oauth2.revoke(state.driveAccessToken, function(){}); } catch(e){}
+  }
+  state.driveAccessToken = null;
+  state.driveTokenExpiry = 0;
+  state.driveStatus = 'disconnected';
+  state.driveEmail = null;
+  state.driveFileId = null;
+  render();
+}
+function ensureFreshDriveToken(){
+  return new Promise(function(resolve, reject){
+    if (state.driveAccessToken && Date.now() < state.driveTokenExpiry){ resolve(); return; }
+    var client = ensureGoogleTokenClient();
+    if (!client){ reject(new Error('Google no está disponible ahora mismo.')); return; }
+    client.callback = function(resp){
+      if (resp.error){ reject(new Error('No se pudo autenticar con Google.')); return; }
+      state.driveAccessToken = resp.access_token;
+      state.driveTokenExpiry = Date.now() + (Number(resp.expires_in) || 3600) * 1000 - 60000;
+      state.driveStatus = 'connected';
+      resolve();
+    };
+    client.requestAccessToken({ prompt: '' });
+  });
+}
+function findDriveBackupFile(){
+  var q = encodeURIComponent("name='" + DRIVE_BACKUP_FILENAME + "' and trashed=false");
+  return fetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&spaces=drive&fields=files(id,name,modifiedTime)', {
+    headers: { Authorization: 'Bearer ' + state.driveAccessToken }
+  }).then(function(r){ return r.json(); }).then(function(d){
+    var f = (d.files && d.files[0]) || null;
+    state.driveFileId = f ? f.id : null;
+    return f;
+  });
+}
+function backupToDrive(){
+  if (!isGoogleDriveConfigured()){ window.alert('El respaldo en Google Drive todavía no está configurado en esta app.'); return; }
+  state.driveStatus = 'working';
+  render();
+  ensureFreshDriveToken().then(function(){
+    return findDriveBackupFile();
+  }).then(function(existing){
+    var content = JSON.stringify(buildFullBackup(), null, 2);
+    var metadata = { name: DRIVE_BACKUP_FILENAME, mimeType: 'application/json' };
+    var boundary = 'mibolsilloapp' + Date.now();
+    var body = '--' + boundary + '\r\n' +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) + '\r\n' +
+      '--' + boundary + '\r\n' +
+      'Content-Type: application/json\r\n\r\n' + content + '\r\n' +
+      '--' + boundary + '--';
+    var url = existing
+      ? 'https://www.googleapis.com/upload/drive/v3/files/' + existing.id + '?uploadType=multipart'
+      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+    return fetch(url, {
+      method: existing ? 'PATCH' : 'POST',
+      headers: { Authorization: 'Bearer ' + state.driveAccessToken, 'Content-Type': 'multipart/related; boundary=' + boundary },
+      body: body
+    });
+  }).then(function(r){
+    if (!r.ok) throw new Error('drive upload failed: ' + r.status);
+    return r.json();
+  }).then(function(f){
+    state.driveFileId = f.id;
+    state.driveStatus = 'connected';
+    state.driveLastBackupAt = new Date().toISOString();
+    render();
+    window.alert('Respaldo guardado en tu Google Drive.');
+  }).catch(function(e){
+    console.error('backupToDrive error', e);
+    state.driveStatus = 'error';
+    render();
+    window.alert('No se pudo guardar el respaldo en Drive. Intenta de nuevo.');
+  });
+}
+function restoreFromDrive(){
+  if (!isGoogleDriveConfigured()){ window.alert('El respaldo en Google Drive todavía no está configurado en esta app.'); return; }
+  state.driveStatus = 'working';
+  render();
+  ensureFreshDriveToken().then(function(){
+    return findDriveBackupFile();
+  }).then(function(existing){
+    if (!existing){
+      state.driveStatus = 'connected';
+      render();
+      window.alert('Todavía no hay ningún respaldo guardado en tu Google Drive.');
+      return null;
+    }
+    return fetch('https://www.googleapis.com/drive/v3/files/' + existing.id + '?alt=media', {
+      headers: { Authorization: 'Bearer ' + state.driveAccessToken }
+    }).then(function(r){ return r.json(); });
+  }).then(function(data){
+    state.driveStatus = 'connected';
+    if (!data){ render(); return; }
+    var fecha = data.exportedAt ? new Date(data.exportedAt).toLocaleString() : 'fecha desconocida';
+    if (!window.confirm('Esto reemplazará TODOS tus datos actuales en este teléfono con el respaldo de Google Drive (' + fecha + '). ¿Continuar?')){ render(); return; }
+    state.transactions = data.transactions || [];
+    state.goal = normalizeGoal(data.goal);
+    state.budgets = data.budgets || {};
+    state.initialBalance = data.initialBalance || { usd: 0, ves: 0 };
+    state.paymentCommitments = data.paymentCommitments || {};
+    state.customCategories = data.customCategories || { expense: [], income: [] };
+    state.currentSavings = data.currentSavings || { monthly: {usd:0,ves:0}, weekly: {usd:0,ves:0} };
+    state.savingsStart = data.savingsStart || { monthly: {usd:0,ves:0}, weekly: {usd:0,ves:0} };
+    rebuildCategoryLists();
+    saveData();
+    saveBudgetsToStorage();
+    try { localStorage.setItem(STORAGE_KEY_BALANCE, JSON.stringify(state.initialBalance)); } catch(e){}
+    savePaymentsToStorage();
+    saveCustomCategoriesToStorage();
+    saveSavingsToStorage();
+    saveSavingsStartToStorage();
+    render();
+    window.alert('Datos restaurados desde Google Drive.');
+  }).catch(function(e){
+    console.error('restoreFromDrive error', e);
+    state.driveStatus = 'error';
+    render();
+    window.alert('No se pudo restaurar desde Drive. Intenta de nuevo.');
+  });
 }
 function formatDDMMYYYY(dateStr){
   var d = new Date(dateStr + 'T00:00:00');
@@ -1006,87 +1119,8 @@ function exportExcel(btn){
   });
 }
 
-/* ---------- sincronización familiar (Firebase) ---------- */
-var familyDocRef = null;
-var fbReady = false;
-var suppressNextPush = false;
-
-function isFirebaseConfigured(){
-  return FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.indexOf('TU_') !== 0 &&
-         FAMILY_CODE && FAMILY_CODE.indexOf('CAMBIA') !== 0;
-}
-function initFirebaseSync(){
-  if (!isFirebaseConfigured()) return;
-  if (typeof firebase === 'undefined'){
-    console.error('Firebase SDK no cargó (revisa tu conexión a internet)');
-    return;
-  }
-  try {
-    state.syncStatus = 'connecting';
-    firebase.initializeApp(FIREBASE_CONFIG);
-    var db = firebase.firestore();
-    try { db.enablePersistence({ synchronizeTabs: true }).catch(function(){}); } catch(e){}
-    familyDocRef = db.collection('tu_bolsillo_app').doc(FAMILY_CODE);
-    fbReady = true;
-    familyDocRef.onSnapshot(function(snap){
-      if (snap.exists){
-        var data = snap.data() || {};
-        state.transactions = data.transactions || [];
-        state.goal = normalizeGoal(data.goal);
-        state.initialBalance = data.initialBalance || { usd: 0, ves: 0 };
-        state.budgets = data.budgets || {};
-        state.paymentCommitments = data.paymentCommitments || {};
-        state.currentSavings = data.currentSavings || { monthly: {usd:0,ves:0}, weekly: {usd:0,ves:0} };
-        state.savingsStart = data.savingsStart || { monthly: {usd:0,ves:0}, weekly: {usd:0,ves:0} };
-        state.customCategories = data.customCategories || { expense: [], income: [] };
-        rebuildCategoryLists();
-        saveCustomCategoriesToStorage();
-        if (data.pinHash){
-          state.pinHash = data.pinHash;
-          try { localStorage.setItem(STORAGE_KEY_PIN, data.pinHash); } catch(e){}
-        }
-        state.syncStatus = 'synced';
-        saveData();
-        try { localStorage.setItem(STORAGE_KEY_BALANCE, JSON.stringify(state.initialBalance)); } catch(e){}
-        try { localStorage.setItem(STORAGE_KEY_BUDGETS, JSON.stringify(state.budgets)); } catch(e){}
-        try { localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(state.paymentCommitments)); } catch(e){}
-        render();
-      } else {
-        pushToCloud();
-      }
-    }, function(err){
-      console.error('Firestore sync error', err);
-      state.syncStatus = 'error';
-      render();
-    });
-  } catch(e){
-    console.error('Firebase init error', e);
-    state.syncStatus = 'error';
-    render();
-  }
-}
-function pushToCloud(){
-  if (!fbReady || !familyDocRef) return;
-  familyDocRef.set({
-    transactions: state.transactions,
-    goal: state.goal,
-    initialBalance: state.initialBalance,
-    budgets: state.budgets,
-    paymentCommitments: state.paymentCommitments,
-    currentSavings: state.currentSavings,
-    savingsStart: state.savingsStart,
-    customCategories: state.customCategories,
-    pinHash: state.pinHash || null,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  }).then(function(){
-    state.syncStatus = 'synced';
-    render();
-  }).catch(function(e){
-    console.error('push to cloud error', e);
-    state.syncStatus = 'error';
-    render();
-  });
-}
+/* ---------- sin sincronización en la nube: esta versión guarda todo solo en el dispositivo ---------- */
+function pushToCloud(){ /* no-op: esta versión no usa ninguna nube, todo vive en localStorage */ }
 function fetchWithTimeout(url, ms){
   var timeoutPromise = new Promise(function(_, reject){
     setTimeout(function(){ reject(new Error('timeout')); }, ms);
@@ -1363,10 +1397,10 @@ function changeMonth(delta){
   render();
 }
 function openForm(){
-  state.form = { type:'egreso', currency:'VES', category:'alimentos', amount:'', date: todayStr(), note:'' };
+  state.form = { type:'egreso', currency:'VES', category: (EXPENSE_CATEGORIES[0] ? EXPENSE_CATEGORIES[0].id : ''), amount:'', date: todayStr(), note:'' };
   state.editingId = null;
   state.showForm = true;
-  state.showNewCategoryInput = false;
+  state.showNewCategoryInput = EXPENSE_CATEGORIES.length === 0;
   render();
 }
 function editTransaction(id){
@@ -1380,7 +1414,9 @@ function editTransaction(id){
 function closeForm(){ state.showForm = false; state.editingId = null; render(); }
 function setFormType(t){
   state.form.type = t;
-  state.form.category = (t==='egreso' ? EXPENSE_CATEGORIES[0].id : INCOME_CATEGORIES[0].id);
+  var list = t === 'egreso' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  state.form.category = list.length ? list[0].id : '';
+  state.showNewCategoryInput = list.length === 0;
   render();
 }
 function setFormCurrency(c){ state.form.currency = c; render(); }
@@ -1405,7 +1441,7 @@ function setFormField(field, value){ state.form[field] = value; }
 function saveTransaction(){
   var f = state.form;
   var amt = Number(f.amount);
-  if (!(amt > 0) || !f.date) return;
+  if (!(amt > 0) || !f.date || !f.category) return;
   if (state.editingId){
     var idx = state.transactions.findIndex(function(t){ return t.id === state.editingId; });
     if (idx > -1){
@@ -1471,30 +1507,6 @@ function saveSavingsStart(period, usd, ves){
   pushToCloud();
 }
 function setMetasView(v){ state.metasView = v; render(); }
-function importAugustSeed(){
-  var RANGE_START = '2026-08-01', RANGE_END = '2026-08-31';
-  var existingInRange = state.transactions.filter(function(t){ return t.date >= RANGE_START && t.date <= RANGE_END; });
-  var msg = existingInRange.length > 0
-    ? 'Se encontraron ' + existingInRange.length + ' movimientos ya cargados entre el 01 y el 18 de agosto (posibles duplicados de versiones anteriores). Esto los eliminará TODOS —sin importar cómo se cargaron— y pondrá los ' + AUGUST_2026_SEED.transactions.length + ' movimientos correctos desde cero. ¿Continuar?'
-    : 'Esto agregará ' + AUGUST_2026_SEED.transactions.length + ' movimientos de agosto 2026 desde tu hoja de cálculo original. ¿Continuar?';
-  if (!window.confirm(msg)) return;
-
-  state.transactions = state.transactions.filter(function(t){ return !(t.date >= RANGE_START && t.date <= RANGE_END); });
-
-  var imported = AUGUST_2026_SEED.transactions.map(function(t){
-    return { id: uid(), type: t.type, category: t.category, amount: t.amount, currency: t.currency, date: t.date, note: t.note || '', source: 'august_seed' };
-  });
-  state.transactions = imported.concat(state.transactions);
-  state.initialBalance = { usd: AUGUST_2026_SEED.initialBalance.usd, ves: AUGUST_2026_SEED.initialBalance.ves };
-  try { localStorage.setItem(STORAGE_KEY_BALANCE, JSON.stringify(state.initialBalance)); } catch(e){}
-  saveData();
-  state.monthOffset = 0;
-  state.view = 'movimientos';
-  render();
-  pushToCloud();
-  window.alert('Listo. Se eliminaron ' + existingInRange.length + ' movimientos previos y se cargaron ' + imported.length + ' movimientos correctos de agosto 2026.');
-}
-
 /* ---------- icons (inline svg, minimal set) ---------- */
 var ICONS = {
   wallet: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>',
@@ -1521,14 +1533,29 @@ var ICONS = {
 /* ---------- render ---------- */
 function esc(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function renderLockScreen(){
+function renderAuthScreen(){
   var html = '<div class="lock-screen">';
   html += '  <div class="lock-icon" style="color:var(--gold)">' + ICONS.wallet2 + '</div>';
-  html += '  <div class="wordmark" style="font-size:28px;margin-top:14px">Mi Bolsillo App</div>';
-  html += '  <div class="lock-sub">Ingresa el PIN familiar</div>';
-  html += '  <input class="input lock-input" type="password" inputmode="numeric" maxlength="6" id="pinInput" placeholder="••••" value="' + esc(state.pinInput||'') + '" oninput="setPinInput(this.value)" onkeyup="if(event.key===\'Enter\') submitPin()">';
-  if (state.pinError) html += '<div class="lock-error">PIN incorrecto, intenta de nuevo.</div>';
-  html += '  <button class="primary-btn lock-btn" onclick="submitPin()">Entrar</button>';
+  html += '  <div class="wordmark" style="font-size:28px;margin-top:14px">Tu Bolsillo App</div>';
+  if (state.authMode === 'setup'){
+    html += '  <div class="lock-sub">Crea tu cuenta. Tus datos se guardan solo en este teléfono, no en internet.</div>';
+    html += '  <div class="auth-card">';
+    html += '    <div class="auth-field"><label>Usuario</label><input class="input auth-input" type="text" placeholder="Ej. Jorge" value="' + esc(state.authInput.username) + '" oninput="setAuthField(\'username\', this.value)"></div>';
+    html += '    <div class="auth-field"><label>Contraseña</label><input class="input auth-input" type="password" placeholder="Mínimo 4 caracteres" oninput="setAuthField(\'password\', this.value)"></div>';
+    html += '    <div class="auth-field"><label>Repite la contraseña</label><input class="input auth-input" type="password" placeholder="Escríbela de nuevo" oninput="setAuthField(\'password2\', this.value)" onkeyup="if(event.key===\'Enter\') submitSetup()"></div>';
+    if (state.authError) html += '<div class="lock-error">' + esc(state.authError) + '</div>';
+    html += '    <button class="primary-btn lock-btn" onclick="submitSetup()">Crear cuenta</button>';
+    html += '    <div class="auth-note"><span class="auth-note-title">Importante</span><div class="auth-note-body">No hay forma de recuperar tu usuario o contraseña si los olvidas — todo se guarda únicamente en este dispositivo, sin servidor de por medio. Guárdalos en un lugar seguro.</div></div>';
+    html += '  </div>';
+  } else {
+    html += '  <div class="lock-sub">Ingresa tu usuario y contraseña</div>';
+    html += '  <div class="auth-card">';
+    html += '    <div class="auth-field"><label>Usuario</label><input class="input auth-input" type="text" placeholder="Tu usuario" value="' + esc(state.authInput.username) + '" oninput="setAuthField(\'username\', this.value)"></div>';
+    html += '    <div class="auth-field"><label>Contraseña</label><input class="input auth-input" type="password" placeholder="Tu contraseña" value="' + esc(state.authInput.password) + '" oninput="setAuthField(\'password\', this.value)" onkeyup="if(event.key===\'Enter\') submitLogin()"></div>';
+    if (state.authError) html += '<div class="lock-error">' + esc(state.authError) + '</div>';
+    html += '    <button class="primary-btn lock-btn" onclick="submitLogin()">Entrar</button>';
+    html += '  </div>';
+  }
   html += '</div>';
   return html;
 }
@@ -1536,9 +1563,9 @@ function renderLockScreen(){
 function render(){
   var root = document.getElementById('app');
   if (state.locked){
-    root.innerHTML = renderLockScreen();
-    var pinEl = document.getElementById('pinInput');
-    if (pinEl) pinEl.focus();
+    root.innerHTML = renderAuthScreen();
+    var firstInput = root.querySelector('.auth-input');
+    if (firstInput) firstInput.focus();
     return;
   }
   var monthTx = getMonthTx();
@@ -1549,8 +1576,8 @@ function render(){
 
   var html = '';
   html += '<div class="header">';
-  html += '  <div><div class="wordmark">Mi Bolsillo App</div></div>';
-  html += '  <div style="display:flex;align-items:center;gap:8px">' + renderSyncBadge() + '<span style="color:var(--gold)">' + ICONS.wallet2 + '</span></div>';
+  html += '  <div><div class="wordmark">Tu Bolsillo App</div></div>';
+  html += '  <div style="display:flex;align-items:center;gap:8px"><span style="color:var(--gold)">' + ICONS.wallet2 + '</span></div>';
   html += '</div>';
 
   if (state.saveError){
@@ -1609,13 +1636,6 @@ function renderRateBar(){
   html += '  <button class="icon-btn ' + (spinning?'spin':'') + '" onclick="fetchBcvRate()" title="Actualizar tasa">' + ICONS.refresh + '</button>';
   html += '</div>';
   return html;
-}
-
-function renderSyncBadge(){
-  if (!isFirebaseConfigured()) return '';
-  var color = state.syncStatus === 'synced' ? 'var(--teal)' : (state.syncStatus === 'error' ? 'var(--coral)' : 'var(--text-faint)');
-  var label = state.syncStatus === 'synced' ? 'Sincronizado' : (state.syncStatus === 'error' ? 'Sin conexión' : 'Conectando…');
-  return '<span title="' + label + '" style="width:8px;height:8px;border-radius:50%;background:' + color + ';display:inline-block"></span>';
 }
 
 function navBtn(view, icon, label){
@@ -1685,7 +1705,7 @@ function renderPaymentAlerts(){
           : ('Vence en ' + p.diffDays + ' días');
         html += '<div class="tx-row">';
         html += '  <span class="tx-dot" style="background:' + pColor + '"></span>';
-        html += '  <div style="flex:1;min-width:0"><div class="tx-label">' + esc(formatDayMonthShort(p.date)) + (p.person?(' · <span style="color:' + (PAYMENT_PERSONS.find(function(x){return x.id===p.person;})||{color:'inherit'}).color + ';font-weight:600">' + esc(personLabel(p.person)) + '</span>'):'') + (p.note?(' · '+esc(p.note)):'') + '</div></div>';
+        html += '  <div style="flex:1;min-width:0"><div class="tx-label">' + esc(formatDayMonthShort(p.date)) + (p.person ? (' · <span style="color:var(--gold);font-weight:600">' + esc(p.person) + '</span>') : '') + (p.note?(' · '+esc(p.note)):'') + '</div></div>';
         html += '  <div style="text-align:right;font-family:var(--font-mono);font-size:11px;font-weight:700;color:' + pColor + '">' + pText + (p.amount ? ('<div style="font-size:10.5px;color:var(--text-faint);font-weight:400">' + fmt(p.amount,p.currency||'VES') + budgetEquivalentInline(p.amount, p.currency||'VES') + '</div>') : '') + '</div>';
         html += '</div>';
       });
@@ -2120,17 +2140,12 @@ function renderPresupuesto(){
 
 function renderSeguridad(){
   var html = '<div class="section-label" style="margin-top:26px">Seguridad</div>';
-  if (state.pinHash){
-    html += '<div class="empty-note" style="padding-top:0">Ya tienes un PIN activo para toda la familia. Compártelo solo con quien deba ver estas finanzas.</div>';
-    html += '<div class="form-group"><label class="form-label">Nuevo PIN (4 a 6 números)</label><input class="input" type="password" inputmode="numeric" maxlength="6" id="newPinInput" placeholder="••••"></div>';
-    html += '<button class="primary-btn" onclick="changePin()">Cambiar PIN</button>';
-    html += '<button class="primary-btn" style="background:var(--surface-2);color:var(--coral);border:1px solid var(--coral);margin-top:8px" onclick="removePinConfirm()">Quitar PIN</button>';
-    html += '<button class="primary-btn" style="background:var(--surface-2);color:var(--gold);border:1px solid var(--gold);margin-top:8px" onclick="lockNow()">Bloquear ahora</button>';
-  } else {
-    html += '<div class="empty-note" style="padding-top:0">Protege la app con un PIN para que no cualquiera que tenga el link vea tus finanzas.</div>';
-    html += '<div class="form-group"><label class="form-label">Crear PIN (4 a 6 números)</label><input class="input" type="password" inputmode="numeric" maxlength="6" id="newPinInput" placeholder="••••"></div>';
-    html += '<button class="primary-btn" onclick="changePin()">Crear PIN</button>';
-  }
+  html += '<div class="empty-note" style="padding-top:0">Tu cuenta: <strong style="color:var(--gold)">' + esc(state.authUsername) + '</strong>. Todo se guarda solo en este teléfono — no hay contraseña de recuperación si la olvidas.</div>';
+  html += '<div class="form-group"><label class="form-label">Contraseña actual</label><input class="input" type="password" id="curPassInput" placeholder="••••"></div>';
+  html += '<div class="form-group"><label class="form-label">Contraseña nueva (mínimo 4 caracteres)</label><input class="input" type="password" id="newPassInput" placeholder="••••"></div>';
+  html += '<div class="form-group"><label class="form-label">Repite la contraseña nueva</label><input class="input" type="password" id="newPassInput2" placeholder="••••"></div>';
+  html += '<button class="primary-btn" onclick="changeAccountPassword()">Cambiar contraseña</button>';
+  html += '<button class="primary-btn" style="background:var(--surface-2);color:var(--gold);border:1px solid var(--gold);margin-top:8px" onclick="lockNow()">Cerrar sesión</button>';
   return html;
 }
 
@@ -2146,10 +2161,32 @@ function renderRespaldo(){
 
   html += '<div class="export-option">';
   html += '  <div class="export-option-title">Respaldo Técnico Completo</div>';
-  html += '  <div class="export-option-desc">Archivo JSON con todo: movimientos, metas, presupuestos, saldo inicial. Para restaurar todo exacto si algo se pierde.</div>';
+  html += '  <div class="export-option-desc">Archivo JSON con todo: movimientos, metas, presupuestos, saldo inicial, compromisos de pago y categorías. Para restaurar todo exacto si algo se pierde.</div>';
   html += '  <button class="primary-btn" style="background:var(--surface-2);color:var(--gold);border:1px solid var(--gold)" onclick="exportJSON()">Descargar respaldo (JSON)</button>';
   html += '</div>';
 
+  html += renderGoogleDriveSection();
+
+  return html;
+}
+
+function renderGoogleDriveSection(){
+  if (!isGoogleDriveConfigured()) return '';
+  var html = '<div class="export-option">';
+  html += '  <div class="export-option-title">Respaldo en tu Google Drive</div>';
+  if (state.driveStatus === 'disconnected' || state.driveStatus === 'error'){
+    html += '  <div class="export-option-desc">Conectá tu propia cuenta de Google para guardar un respaldo directo en tu Drive personal. Solo esta app puede ver ese archivo — nadie más, ni siquiera nosotros.</div>';
+    if (state.driveStatus === 'error') html += '  <div class="lock-error" style="margin-bottom:8px">No se pudo conectar. Intenta de nuevo.</div>';
+    html += '  <button class="primary-btn" style="background:var(--surface-2);color:var(--gold);border:1px solid var(--gold)" onclick="connectGoogleDrive()">Conectar con Google Drive</button>';
+  } else if (state.driveStatus === 'connecting' || state.driveStatus === 'working'){
+    html += '  <div class="export-option-desc">' + (state.driveStatus === 'connecting' ? 'Conectando con Google…' : 'Trabajando con tu Google Drive…') + '</div>';
+  } else {
+    html += '  <div class="export-option-desc">Conectado' + (state.driveEmail ? (' como <strong style="color:var(--gold)">' + esc(state.driveEmail) + '</strong>') : '') + '.' + (state.driveLastBackupAt ? (' Último respaldo: ' + new Date(state.driveLastBackupAt).toLocaleString() + '.') : '') + '</div>';
+    html += '  <button class="primary-btn" style="background:var(--surface-2);color:var(--gold);border:1px solid var(--gold);margin-bottom:8px" onclick="backupToDrive()">Guardar respaldo en Drive</button>';
+    html += '  <button class="primary-btn" style="background:var(--surface-2);color:var(--teal);border:1px solid var(--teal);margin-bottom:8px" onclick="restoreFromDrive()">Restaurar desde Drive</button>';
+    html += '  <button class="primary-btn" style="background:var(--surface-2);color:var(--text-dim);border:1px solid var(--line)" onclick="disconnectGoogleDrive()">Desconectar</button>';
+  }
+  html += '</div>';
   return html;
 }
 
@@ -2174,10 +2211,10 @@ function renderMetasBack(title, target){
 function renderAjustesHome(){
   var html = '<div class="section-label">Ajustes</div>';
   html += renderMetasMenuCard(ICONS.grid, 'Presupuesto Mensual', 'Límites de Gasto con Alertas', 'presupuesto', 'ajustes');
-  html += renderMetasMenuCard(ICONS.wallet, 'Seguridad', state.pinHash ? 'PIN activo' : 'Sin PIN Configurado', 'seguridad', 'ajustes');
+  html += renderMetasMenuCard(ICONS.wallet, 'Seguridad', 'Cuenta: ' + (state.authUsername || '—'), 'seguridad', 'ajustes');
   html += renderMetasMenuCard(ICONS.calendar, 'Respaldo de Datos', 'Exportar a CSV o JSON', 'respaldo', 'ajustes');
   html += renderMetasMenuCard(ICONS.wallet2, 'Saldo Inicial y Datos Importados', 'Punto de Partida y Carga de Agosto', 'saldo', 'ajustes');
-  html += renderMetasMenuCard(ICONS.list, 'Categorías', 'Crear', 'categorias', 'ajustes');
+  html += renderMetasMenuCard(ICONS.list, 'Categorías', 'Crear', 'Categorias', 'ajustes');
   return html;
 }
 
@@ -2211,7 +2248,7 @@ function renderPagos(){
   var byMonth = {}; // key -> {usd, ves}
   var byPerson = {}; // id -> {usd, ves}
   var byMonthPerson = {}; // monthKey -> personId -> {usd, ves}
-  PAYMENT_CATEGORIES.forEach(function(catId){
+  getPaymentCategories().forEach(function(catId){
     (state.paymentCommitments[catId] || []).forEach(function(p){
       var amt = Number(p.amount) || 0;
       if (p.currency === 'USD') grandUSD += amt; else grandVES += amt;
@@ -2245,10 +2282,10 @@ function renderPagos(){
         html += '  <div class="goal-numbers" style="font-size:13px;font-weight:700;color:var(--gold)">' + (m.usd>0?fmt(m.usd,'USD'):'') + (m.usd>0&&m.ves>0?' + ':'') + (m.ves>0?fmt(m.ves,'VES'):'') + '</div>';
         var mp = byMonthPerson[mk];
         if (mp){
-          PAYMENT_PERSONS.forEach(function(per){
-            var pm = mp[per.id];
+          Object.keys(mp).sort().forEach(function(personName){
+            var pm = mp[personName];
             if (!pm || (pm.usd<=0 && pm.ves<=0)) return;
-            html += '  <div class="budget-note" style="margin-top:4px"><span style="color:' + per.color + ';font-weight:600">' + esc(per.label) + '</span>: ' + (pm.usd>0?fmt(pm.usd,'USD'):'') + (pm.usd>0&&pm.ves>0?' + ':'') + (pm.ves>0?fmt(pm.ves,'VES'):'') + '</div>';
+            html += '  <div class="budget-note" style="margin-top:4px"><span style="color:var(--gold);font-weight:600">' + esc(personName) + '</span>: ' + (pm.usd>0?fmt(pm.usd,'USD'):'') + (pm.usd>0&&pm.ves>0?' + ':'') + (pm.ves>0?fmt(pm.ves,'VES'):'') + '</div>';
           });
         }
         html += '</div>';
@@ -2260,14 +2297,13 @@ function renderPagos(){
     html += '  <div class="goal-numbers" style="font-size:14px;font-weight:700;color:var(--gold)">' + (grandUSD>0?fmt(grandUSD,'USD'):'') + (grandUSD>0&&grandVES>0?' + ':'') + (grandVES>0?fmt(grandVES,'VES'):'') + '</div>';
     html += '</div>';
 
-    var personIds = PAYMENT_PERSONS.map(function(p){ return p.id; }).filter(function(id){ return byPerson[id]; });
-    if (personIds.length){
+    var personNames = Object.keys(byPerson).sort();
+    if (personNames.length){
       html += '<div class="section-label" style="margin-top:4px">Por persona</div>';
-      personIds.forEach(function(id){
-        var m = byPerson[id];
-        var perDef = PAYMENT_PERSONS.find(function(p){ return p.id === id; });
-        html += '<div class="goal-card" style="margin-bottom:8px;border-left:3px solid ' + perDef.color + '">';
-        html += '  <div class="goal-row"><span style="color:' + perDef.color + ';font-weight:700">Total de Pago ' + esc(personLabel(id)) + '</span></div>';
+      personNames.forEach(function(personName){
+        var m = byPerson[personName];
+        html += '<div class="goal-card" style="margin-bottom:8px;border-left:3px solid var(--teal)">';
+        html += '  <div class="goal-row"><span style="color:var(--teal);font-weight:700">Total de Pago ' + esc(personName) + '</span></div>';
         html += '  <div class="goal-numbers" style="font-size:13px;font-weight:700;color:var(--gold)">' + (m.usd>0?fmt(m.usd,'USD'):'') + (m.usd>0&&m.ves>0?' + ':'') + (m.ves>0?fmt(m.ves,'VES'):'') + '</div>';
         html += '</div>';
       });
@@ -2275,7 +2311,7 @@ function renderPagos(){
     }
   }
 
-  var sortedCategories = PAYMENT_CATEGORIES.slice().sort(function(a, b){
+  var sortedCategories = getPaymentCategories().slice().sort(function(a, b){
     var hasA = (state.paymentCommitments[a] || []).length > 0;
     var hasB = (state.paymentCommitments[b] || []).length > 0;
     if (hasA === hasB) return 0;
@@ -2314,7 +2350,7 @@ function renderPagos(){
           var isEditing = editing && editing.id === p.id;
           html += '<div class="tx-row" style="' + (isEditing ? 'border:1px solid var(--gold)' : '') + '">';
           html += '  <span class="tx-dot" style="background:' + (p.paid?'var(--teal)':'var(--coral)') + '"></span>';
-          html += '  <div style="flex:1;min-width:0"><div class="tx-label">' + esc(formatDayMonthShort(p.date)) + (p.person ? (' · <span style="color:' + (PAYMENT_PERSONS.find(function(x){return x.id===p.person;})||{color:'inherit'}).color + ';font-weight:600">' + esc(personLabel(p.person)) + '</span>') : '') + (p.note ? (' · ' + esc(p.note)) : '') + '</div>' + (p.amount ? ('<div class="tx-date">' + fmt(p.amount, p.currency||'VES') + budgetEquivalentInline(p.amount, p.currency||'VES') + '</div>') : '') + '</div>';
+          html += '  <div style="flex:1;min-width:0"><div class="tx-label">' + esc(formatDayMonthShort(p.date)) + (p.person ? (' · <span style="color:var(--gold);font-weight:600">' + esc(p.person) + '</span>') : '') + (p.note ? (' · ' + esc(p.note)) : '') + '</div>' + (p.amount ? ('<div class="tx-date">' + fmt(p.amount, p.currency||'VES') + budgetEquivalentInline(p.amount, p.currency||'VES') + '</div>') : '') + '</div>';
           html += '  <button class="trash-btn" style="width:auto;padding:4px 8px;font-family:var(--font-mono);font-size:10px;color:' + (p.paid?'var(--teal)':'var(--coral)') + '" onclick="togglePaymentPaid(\'' + catId + '\',\'' + p.id + '\')">' + (p.paid?'Pagado':'Pendiente') + '</button>';
           html += '  <button class="trash-btn" onclick="editPaymentDate(\'' + catId + '\',\'' + p.id + '\')" title="Editar">' + ICONS.edit + '</button>';
           html += '  <button class="trash-btn" onclick="deletePaymentDate(\'' + catId + '\',\'' + p.id + '\')" title="Eliminar">' + ICONS.trash + '</button>';
@@ -2325,11 +2361,7 @@ function renderPagos(){
 
       html += '<div class="sheet-title" style="font-size:13px;margin-bottom:8px">' + (editItem ? 'Editar fecha' : 'Agregar Fecha') + '</div>';
       html += '<div class="form-group"><label class="form-label">Fecha de Pago</label><input class="input" type="date" id="payDate_' + catId + '" value="' + (editItem ? esc(editItem.date) : '') + '"></div>';
-      html += '<div class="form-group"><label class="form-label">Persona (opcional)</label><select class="input" id="payPerson_' + catId + '"><option value="">Sin asignar</option>';
-      PAYMENT_PERSONS.forEach(function(per){
-        html += '<option value="' + per.id + '" ' + (editItem && editItem.person===per.id ? 'selected' : '') + '>' + esc(per.label) + '</option>';
-      });
-      html += '</select></div>';
+      html += '<div class="form-group"><label class="form-label">Persona (opcional)</label><input class="input" type="text" id="payPerson_' + catId + '" placeholder="Ej. Jorge, Sheila…" value="' + (editItem ? esc(editItem.person||'') : '') + '"></div>';
       html += '<div class="form-group"><label class="form-label">Nota (opcional)</label><input class="input" type="text" id="payNote_' + catId + '" placeholder="Ej. Cuota 2 de 3" value="' + (editItem ? esc(editItem.note||'') : '') + '"></div>';
       html += '<div class="form-row">';
       html += '  <div class="form-group" style="flex:1"><label class="form-label">Monto (opcional)</label><input class="input" type="number" inputmode="decimal" id="payAmount_' + catId + '" value="' + (editItem && editItem.amount ? editItem.amount : '') + '"></div>';
@@ -2356,7 +2388,7 @@ function renderCategoriasAjustes(){
   var html = '<div class="section-label">Categorías de Egreso</div>';
   html += '<div class="empty-note" style="padding-top:0">Las predeterminadas no se pueden eliminar. Agrega las tuyas cuando quieras — se guardan y se sincronizan igual que el resto de tus datos.</div>';
   DEFAULT_EXPENSE_CATEGORIES.forEach(function(c){
-    html += '<div class="form-row" style="align-items:center;margin-bottom:8px"><span style="flex:1;font-size:13.5px">' + esc(c.label) + '</span></div>';
+    html += '<div class="form-row" style="align-items:center;margin-bottom:8px"><span style="flex:1;font-size:13.5px">' + esc(c.label) + '</span><span style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px">Predeterminada</span></div>';
   });
   (state.customCategories.expense || []).forEach(function(c){
     var isEditing = state.editingCategory && state.editingCategory.type === 'egreso' && state.editingCategory.id === c.id;
@@ -2377,7 +2409,7 @@ function renderCategoriasAjustes(){
 
   html += '<div class="section-label" style="margin-top:26px">Categorías de Ingreso</div>';
   DEFAULT_INCOME_CATEGORIES.forEach(function(c){
-    html += '<div class="form-row" style="align-items:center;margin-bottom:8px"><span style="flex:1;font-size:13.5px">' + esc(c.label) + '</span></div>';
+    html += '<div class="form-row" style="align-items:center;margin-bottom:8px"><span style="flex:1;font-size:13.5px">' + esc(c.label) + '</span><span style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px">Predeterminada</span></div>';
   });
   (state.customCategories.income || []).forEach(function(c){
     var isEditingInc = state.editingCategory && state.editingCategory.type === 'ingreso' && state.editingCategory.id === c.id;
@@ -2411,10 +2443,6 @@ function renderMetasAjustes(){
   html += '<div class="form-group"><label class="form-label">Saldo Inicial en USD</label><input class="input" type="number" inputmode="decimal" id="balUsdInput" value="' + state.initialBalance.usd + '"></div>';
   html += '<div class="form-group"><label class="form-label">Saldo Inicial en Bs.</label><input class="input" type="number" inputmode="decimal" id="balVesInput" value="' + state.initialBalance.ves + '"></div>';
   html += '<button class="primary-btn" onclick="saveInitialBalance(document.getElementById(\'balUsdInput\').value, document.getElementById(\'balVesInput\').value)">Guardar saldo inicial</button>';
-
-  html += '<div class="section-label" style="margin-top:26px">Importar datos existentes</div>';
-  html += '<div class="empty-note" style="padding-top:0">Carga los ' + AUGUST_2026_SEED.transactions.length + ' movimientos del 01 al 18 de agosto desde tu hoja "Ingresos y Egresos Mes Agosto 2026", con el saldo inicial de esa fecha (' + fmt(AUGUST_2026_SEED.initialBalance.usd,'USD') + ' / ' + fmt(AUGUST_2026_SEED.initialBalance.ves,'VES') + '). Si ya habías importado antes, esto reemplaza esos datos en vez de duplicarlos.</div>';
-  html += '<button class="primary-btn" style="background:var(--surface-2);color:var(--gold);border:1px solid var(--gold)" onclick="importAugustSeed()">Cargar 01–18 Agosto 2026</button>';
   return html;
 }
 
@@ -2425,7 +2453,8 @@ function renderMetas(totals, monthTx){
 function renderFormSheet(){
   var f = state.form;
   var cats = f.type === 'egreso' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
-  var canSave = Number(f.amount) > 0 && f.date;
+  var noCats = cats.length === 0;
+  var canSave = Number(f.amount) > 0 && f.date && !!f.category;
   var isEditing = !!state.editingId;
 
   var html = '';
@@ -2440,17 +2469,26 @@ function renderFormSheet(){
   html += '    </div>';
 
   html += '    <div class="form-group" style="margin-top:12px">';
-  html += '      <div style="display:flex;align-items:center;justify-content:space-between"><label class="form-label" style="margin-bottom:0">Categoría</label><button type="button" class="icon-btn" style="width:auto;height:auto;padding:3px 9px;font-size:11px" onclick="toggleNewCategoryInput()">' + (state.showNewCategoryInput ? 'Cancelar' : '+ Nueva') + '</button></div>';
-  html += '      <select class="input" id="txCategory" onchange="setFormField(\'category\', this.value)">';
-  cats.forEach(function(c){
-    html += '<option value="' + c.id + '" ' + (f.category===c.id?'selected':'') + '>' + esc(c.label) + '</option>';
-  });
-  html += '      </select>';
-  if (state.showNewCategoryInput){
-    html += '      <div class="form-row" style="margin-top:8px">';
-    html += '        <input class="input" type="text" placeholder="Nombre de la categoría nueva" id="newCategoryLabel" style="flex:1">';
+  if (noCats){
+    html += '      <label class="form-label">Categoría</label>';
+    html += '      <div class="empty-note" style="padding:0 0 8px">Todavía no tienes categorías de ' + (f.type==='egreso'?'egreso':'ingreso') + '. Crea la primera para poder guardar el movimiento:</div>';
+    html += '      <div class="form-row">';
+    html += '        <input class="input" type="text" placeholder="Nombre de la categoría" id="newCategoryLabel" style="flex:1">';
     html += '        <button type="button" class="primary-btn" style="width:auto;padding:0 14px" onclick="confirmAddCategory()">Agregar</button>';
     html += '      </div>';
+  } else {
+    html += '      <div style="display:flex;align-items:center;justify-content:space-between"><label class="form-label" style="margin-bottom:0">Categoría</label><button type="button" class="icon-btn" style="width:auto;height:auto;padding:3px 9px;font-size:11px" onclick="toggleNewCategoryInput()">' + (state.showNewCategoryInput ? 'Cancelar' : '+ Nueva') + '</button></div>';
+    html += '      <select class="input" id="txCategory" onchange="setFormField(\'category\', this.value)">';
+    cats.forEach(function(c){
+      html += '<option value="' + c.id + '" ' + (f.category===c.id?'selected':'') + '>' + esc(c.label) + '</option>';
+    });
+    html += '      </select>';
+    if (state.showNewCategoryInput){
+      html += '      <div class="form-row" style="margin-top:8px">';
+      html += '        <input class="input" type="text" placeholder="Nombre de la categoría nueva" id="newCategoryLabel" style="flex:1">';
+      html += '        <button type="button" class="primary-btn" style="width:auto;padding:0 14px" onclick="confirmAddCategory()">Agregar</button>';
+      html += '      </div>';
+    }
   }
   html += '    </div>';
 
@@ -2480,7 +2518,7 @@ loadData();
 loadCachedRate();
 loadCachedHistory();
 loadInitialBalance();
-loadPin();
+loadAuth();
 loadCustomCategories();
 loadBudgets();
 loadPayments();
@@ -2489,7 +2527,6 @@ loadSavingsStart();
 render();
 fetchBcvRate();
 fetchBcvHistory();
-initFirebaseSync();
 if ('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').then(function(){
     setTimeout(function(){ checkAndNotifyPayments(false); }, 2000);
