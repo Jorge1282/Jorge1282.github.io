@@ -1213,6 +1213,26 @@ function getTotals(monthTx){
   });
   return t;
 }
+function txAmountUSD(tx){
+  /* Convierte UNA transacción a su equivalente en $, con signo (+ingreso/-egreso),
+     usando la tasa vigente en la fecha exacta de esa transacción (no la de hoy).
+     Devuelve { value, converted } — converted=false si era en Bs. y no había tasa. */
+  var amt = Number(tx.amount) || 0;
+  if (tx.currency === 'USD') return { value: signedAmount(tx), converted: true };
+  var rate = getRateForDate(tx.date);
+  if (!rate) return { value: 0, converted: false };
+  var usd = amt / rate;
+  return { value: tx.type === 'ingreso' ? usd : -usd, converted: true };
+}
+function getMonthTotalsUSD(monthTx){
+  var incomeUSD = 0, expenseUSD = 0, anyUnconverted = false;
+  monthTx.forEach(function(tx){
+    var r = txAmountUSD(tx);
+    if (!r.converted){ anyUnconverted = true; return; }
+    if (tx.type === 'ingreso') incomeUSD += r.value; else expenseUSD += Math.abs(r.value);
+  });
+  return { incomeUSD: incomeUSD, expenseUSD: expenseUSD, anyUnconverted: anyUnconverted };
+}
 function getCategoryBreakdown(monthTx){
   var map = {};
   monthTx.filter(function(t){ return t.type==='egreso'; }).forEach(function(tx){
@@ -1226,6 +1246,27 @@ function getCategoryBreakdown(monthTx){
     var magB = Math.abs(b.ves) + Math.abs(b.usd) * 1000;
     return magB - magA;
   });
+  return rows;
+}
+function getCategoryBreakdownUSD(monthTx){
+  /* Igual que getCategoryBreakdown, pero unifica todo en un solo total en $ por categoría —
+     cada egreso en Bs. se convierte con la tasa vigente en SU PROPIO día, no la de hoy. */
+  var map = {};
+  var anyUnconverted = false;
+  monthTx.filter(function(t){ return t.type==='egreso'; }).forEach(function(tx){
+    if (!map[tx.category]) map[tx.category] = { category: tx.category, usdTotal: 0, unconverted: false };
+    var amt = Number(tx.amount) || 0;
+    if (!amt) return;
+    if (tx.currency === 'USD'){
+      map[tx.category].usdTotal += amt;
+    } else {
+      var rate = getRateForDate(tx.date);
+      if (rate){ map[tx.category].usdTotal += amt / rate; }
+      else { map[tx.category].unconverted = true; anyUnconverted = true; }
+    }
+  });
+  var rows = Object.keys(map).map(function(k){ return map[k]; });
+  rows.sort(function(a,b){ return b.usdTotal - a.usdTotal; });
   return rows;
 }
 
@@ -1830,6 +1871,35 @@ function navBtn(view, icon, label){
   return '<button class="nav-btn ' + (active?'active':'') + '" onclick="setView(\'' + view + '\')">' + icon + '<span>' + label + '</span></button>';
 }
 
+function renderCatUSDLine(amountUSD, maxAmt, budgetUSD, unconverted){
+  var barColor = 'var(--coral)';
+  var badge = '';
+  var pct;
+  var bottomLine = '<div class="cat-currency-bottom">' + fmt(amountUSD, 'USD') + (unconverted ? ' <span style="color:var(--text-faint)">(hay un egreso en Bs. sin tasa de ese día)</span>' : '') + '</div>';
+  if (budgetUSD > 0){
+    /* Con presupuesto definido: la barra refleja % del PRESUPUESTO (llena = 100% gastado),
+       no el tamaño relativo frente a otras categorías — así el color y el llenado
+       siempre cuentan la misma historia (roja Y llena si se pasó, no roja y corta). */
+    var bpct = Math.round((amountUSD / budgetUSD) * 100);
+    pct = Math.max(4, Math.min(100, bpct));
+    var badgeClass = 'badge-ok';
+    if (bpct >= 100){ barColor = '#ff5c5c'; badgeClass = 'badge-over'; }
+    else if (bpct >= 80){ barColor = '#E0A94E'; badgeClass = 'badge-warn'; }
+    badge = '<span class="cat-pct-badge ' + badgeClass + '">' + bpct + '%' + (bpct>=100?' ⚠':'') + '</span>';
+    bottomLine = '<div class="cat-currency-bottom">' + fmt(amountUSD, 'USD') + ' <span class="cat-budget-of">de</span> ' + fmt(budgetUSD, 'USD') + (unconverted ? ' <span style="color:var(--text-faint)">(hay un egreso en Bs. sin tasa de ese día)</span>' : '') + '</div>';
+  } else {
+    /* Sin presupuesto: la barra muestra el tamaño relativo frente a la categoría
+       más grande del mes, solo como referencia visual de "en qué se fue más plata". */
+    pct = Math.max(4, Math.round((amountUSD / maxAmt) * 100));
+  }
+  var html = '<div class="cat-currency-line">';
+  html += '  <div class="cat-currency-top"><span class="cat-currency-tag">$</span>' + badge + '</div>';
+  html += '  <div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>';
+  html += bottomLine;
+  html += '</div>';
+  return html;
+}
+
 function renderCatCurrencyLine(amount, currency, maxAmt, budgetAmt, budgetIsConverted, budgetOrigAmt, budgetOrigCurrency){
   var pct = Math.max(4, Math.round((amount / maxAmt) * 100));
   var barColor = 'var(--coral)';
@@ -1903,6 +1973,7 @@ function renderPaymentAlerts(){
 }
 
 function renderResumen(totals, breakdown){
+  var monthTx = getMonthTx();
   var balanceUSD = totals.incomeUSD - totals.expenseUSD;
   var balanceVES = totals.incomeVES - totals.expenseVES;
   var maxCat = breakdown.length ? breakdown[0].amount : 1;
@@ -1934,7 +2005,7 @@ function renderResumen(totals, breakdown){
   var openingAvailableVES = opening.ves - ahorroAlInicioMes.ves;
   var totalIncomeUSD = openingAvailableUSD + totals.incomeUSD;
   var totalIncomeVES = openingAvailableVES + totals.incomeVES;
-  html += '<div style="font-size:11px;letter-spacing:0.6px;color:var(--text-faint);text-transform:uppercase;margin:2px 2px 6px">Saldo Inicial + Ingresos vs. Egresos</div>';
+  html += '<div style="font-size:11px;letter-spacing:0.6px;color:var(--text-faint);text-transform:uppercase;margin:2px 2px 6px">Disponible al Inicio del Mes + Ingresos vs. Egresos</div>';
   html += '<div class="stat-grid">';
   html += '  <div class="stat-card" style="border-color:var(--teal)">';
   html += '    <div class="stat-card-head"><span>INGRESOS TOTALES</span><span style="color:var(--teal)">' + ICONS.up + '</span></div>';
@@ -2001,20 +2072,17 @@ function renderResumen(totals, breakdown){
   if (breakdown.length === 0){
     html += '<div class="empty-note">Aún no registras egresos este mes.</div>';
   } else {
-    var maxVes = Math.max.apply(null, breakdown.map(function(r){ return r.ves; }).concat([1]));
-    var maxUsd = Math.max.apply(null, breakdown.map(function(r){ return r.usd; }).concat([1]));
+    var breakdownUSD = getCategoryBreakdownUSD(monthTx);
+    var maxUsd = Math.max.apply(null, breakdownUSD.map(function(r){ return r.usdTotal; }).concat([1]));
     var todayRate = getRateForDate(todayStr());
     html += '<div class="ledger-list">';
-    breakdown.forEach(function(row){
+    breakdownUSD.forEach(function(row){
       var budget = state.budgets[row.category] || {};
-      var vesBudget = budget.ves || 0, vesConverted = false;
-      var usdBudget = budget.usd || 0, usdConverted = false;
-      if (!vesBudget && budget.usd > 0 && todayRate){ vesBudget = budget.usd * todayRate; vesConverted = true; }
-      if (!usdBudget && budget.ves > 0 && todayRate){ usdBudget = budget.ves / todayRate; usdConverted = true; }
+      var budgetUSD = budget.usd || 0;
+      if (!budgetUSD && budget.ves > 0 && todayRate) budgetUSD = budget.ves / todayRate;
       html += '<div class="cat-row">';
       html += '  <div class="cat-row-top"><span class="cat-label">' + esc(catLabel(row.category)) + '</span></div>';
-      if (row.ves > 0) html += renderCatCurrencyLine(row.ves, 'VES', maxVes, vesBudget, vesConverted, budget.usd, 'USD');
-      if (row.usd > 0) html += renderCatCurrencyLine(row.usd, 'USD', maxUsd, usdBudget, usdConverted, budget.ves, 'VES');
+      html += renderCatUSDLine(row.usdTotal, maxUsd, budgetUSD, row.unconverted);
       html += '</div>';
     });
     html += '</div>';
@@ -2040,12 +2108,14 @@ function renderMovimientos(monthTx){
       ? ('Semana ' + formatDayMonthShort(g.start) + ' – ' + formatDayMonthShort(g.end))
       : g.label;
     var expanded = isGroupExpanded(g.key, gi);
+    var groupNetUSD = 0, groupUnconverted = false;
+    g.txs.forEach(function(t){
+      var r = txAmountUSD(t);
+      if (!r.converted) groupUnconverted = true; else groupNetUSD += r.value;
+    });
     html += '<button class="group-header group-header-btn" onclick="toggleGroup(\'' + g.key + '\',' + gi + ')">';
     html += '  <span class="group-title-wrap"><span class="group-chevron ' + (expanded?'open':'') + '">' + ICONS.chevronDown + '</span><span class="group-title">' + esc(title) + '</span></span>';
-    html += '  <span class="group-net">';
-    if (g.netUSD !== 0) html += '<span style="color:' + (g.netUSD>=0?'var(--teal)':'var(--coral)') + '">' + (g.netUSD>=0?'+':'') + fmt(g.netUSD,'USD') + '</span> ';
-    if (g.netVES !== 0) html += '<span style="color:' + (g.netVES>=0?'var(--teal)':'var(--coral)') + '">' + (g.netVES>=0?'+':'') + fmt(g.netVES,'VES') + '</span>';
-    html += '</span>';
+    html += '  <span class="group-net"><span style="color:' + (groupNetUSD>=0?'var(--teal)':'var(--coral)') + '">' + (groupNetUSD>=0?'+':'') + fmt(groupNetUSD,'USD') + '</span>' + (groupUnconverted?' <span style="color:var(--text-faint)">(hay montos sin tasa)</span>':'') + '</span>';
     html += '</button>';
 
     if (!expanded){ return; }
@@ -2059,13 +2129,17 @@ function renderMovimientos(monthTx){
         html += '<div class="day-divider">' + esc(DAYS_ES[dd.getDay()]) + ' ' + formatDayMonthShort(t.date) + '</div>';
       }
       var isIncome = t.type === 'ingreso';
+      var txResult = txAmountUSD(t);
+      var txAmountDisplay = txResult.converted
+        ? fmt(Math.abs(txResult.value), 'USD')
+        : fmt(t.amount, t.currency) + ' <span style="color:var(--text-faint);font-size:10px">(sin tasa de ese día)</span>';
       html += '<div class="tx-row">';
       html += '  <span class="tx-dot" style="background:' + (isIncome?'var(--teal)':'var(--coral)') + '"></span>';
       html += '  <div style="flex:1;min-width:0">';
       html += '    <div class="tx-label">' + esc(catLabel(t.category)) + '</div>';
-      html += '    <div class="tx-date">' + esc(t.date) + (t.note ? ' · ' + esc(t.note) : '') + '</div>';
+      html += '    <div class="tx-date">' + esc(t.date) + (t.note ? ' · ' + esc(t.note) : '') + (t.currency==='VES' && txResult.converted ? (' · Bs. ' + Number(t.amount).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})) : '') + '</div>';
       html += '  </div>';
-      html += '  <div class="tx-amount" style="color:' + (isIncome?'var(--teal)':'var(--coral)') + '">' + (isIncome?'+ ':'\u2212 ') + fmt(t.amount, t.currency) + '</div>';
+      html += '  <div class="tx-amount" style="color:' + (isIncome?'var(--teal)':'var(--coral)') + '">' + (isIncome?'+ ':'\u2212 ') + txAmountDisplay + '</div>';
       html += '  <button class="trash-btn" onclick="editTransaction(\'' + t.id + '\')" title="Editar">' + ICONS.edit + '</button>';
       html += '  <button class="trash-btn" onclick="deleteTransaction(\'' + t.id + '\')" title="Eliminar">' + ICONS.trash + '</button>';
       html += '</div>';
@@ -2292,68 +2366,89 @@ function renderBudgetVsRealIncomeCard(totals){
   if (sumUsd === 0 && sumVes === 0){
     return '<div class="empty-note" style="padding-top:0">Todavía no definiste presupuestos por categoría (Ajustes → Presupuesto por Categoría).</div>';
   }
-  if (totals.incomeUSD === 0 && totals.incomeVES === 0){
-    return '<div class="empty-note" style="padding-top:0">Todavía no cargaste ingresos este mes — en cuanto lo hagas, vas a ver acá qué porcentaje de lo que ya cobraste está comprometido en presupuesto.</div>';
+  /* Mismo criterio que ya usan el Coach y Resumen: el "ingreso real" para planificar
+     no es solo lo que entró este mes — también cuenta lo que ya tenías Disponible
+     (Saldo Inicial del mes, menos el ahorro que ya existía en ese momento). Si no
+     hiciéramos esto, un presupuesto financiado en parte con ahorro/saldo previo
+     se vería "excedido" aunque en la práctica esté perfectamente cubierto. */
+  var opening = getMonthOpeningBalance();
+  var vdForOpening3 = getViewDate();
+  var monthStartStr3 = vdForOpening3.getFullYear() + '-' + pad2(vdForOpening3.getMonth()+1) + '-01';
+  var ahorroAlInicio3 = getSavingsAtDate('monthly', monthStartStr3);
+  var openingAvailableUSD3 = opening.usd - ahorroAlInicio3.usd;
+  var openingAvailableVES3 = opening.ves - ahorroAlInicio3.ves;
+  var incomeRealUSD = openingAvailableUSD3 + totals.incomeUSD;
+  var incomeRealVES = openingAvailableVES3 + totals.incomeVES;
+  if (incomeRealUSD <= 0 && incomeRealVES <= 0){
+    return '<div class="empty-note" style="padding-top:0">Todavía no cargaste ingresos este mes ni tenés disponible previo — en cuanto haya algo, vas a ver acá qué porcentaje está comprometido en presupuesto.</div>';
   }
   var html = '';
-  if (sumUsd > 0 && totals.incomeUSD > 0){
-    var pctU = Math.round((sumUsd / totals.incomeUSD) * 100);
+  if (sumUsd > 0 && incomeRealUSD > 0){
+    var pctU = Math.round((sumUsd / incomeRealUSD) * 100);
     var colorU = pctU > 100 ? 'var(--coral)' : 'var(--teal)';
     html += '<div class="goal-card">';
-    html += '  <div class="goal-row"><span>Presupuesto vs Ingreso Real (USD)</span><span class="goal-pct" style="color:' + colorU + '">' + pctU + '%</span></div>';
+    html += '  <div class="goal-row"><span>Presupuesto vs Disponible + Ingreso Real</span><span class="goal-pct" style="color:' + colorU + '">' + pctU + '%</span></div>';
     html += '  <div class="bar-track"><div class="bar-fill-gold" style="width:' + Math.min(100,pctU) + '%;background:' + colorU + '"></div></div>';
-    html += '  <div class="goal-numbers">' + fmt(sumUsd,'USD') + ' presupuestado de ' + fmt(totals.incomeUSD,'USD') + ' ya cobrado' + (pctU>100?' · Ya comprometiste más de lo que entró':'') + '</div>';
-    html += '</div>';
-  }
-  if (sumVes > 0 && totals.incomeVES > 0){
-    var pctV = Math.round((sumVes / totals.incomeVES) * 100);
-    var colorV = pctV > 100 ? 'var(--coral)' : 'var(--teal)';
-    html += '<div class="goal-card" style="margin-top:8px">';
-    html += '  <div class="goal-row"><span>Presupuesto vs Ingreso Real (Bs.)</span><span class="goal-pct" style="color:' + colorV + '">' + pctV + '%</span></div>';
-    html += '  <div class="bar-track"><div class="bar-fill-gold" style="width:' + Math.min(100,pctV) + '%;background:' + colorV + '"></div></div>';
-    html += '  <div class="goal-numbers">' + fmt(sumVes,'VES') + ' presupuestado de ' + fmt(totals.incomeVES,'VES') + ' ya cobrado' + (pctV>100?' · Ya comprometiste más de lo que entró':'') + '</div>';
+    html += '  <div class="goal-numbers">' + fmt(sumUsd,'USD') + ' presupuestado de ' + fmt(incomeRealUSD,'USD') + ' disponible + cobrado' + (pctU>100?' · Ya comprometiste más de lo que tenías':'') + '</div>';
+    html += '  <div class="budget-note" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)">Desglose: ' + fmt(openingAvailableUSD3,'USD') + ' Disponible al Inicio + ' + fmt(totals.incomeUSD,'USD') + ' Ingreso Real de este mes = ' + fmt(incomeRealUSD,'USD') + '</div>';
     html += '</div>';
   }
   if (!html){
-    html = '<div class="empty-note" style="padding-top:0">Tenés presupuesto definido en una moneda distinta a la que cargaste ingresos este mes — no hay una comparación directa disponible todavía.</div>';
+    html = '<div class="empty-note" style="padding-top:0">Tenés presupuesto definido en una moneda distinta a la que tenés disponible este mes — no hay una comparación directa disponible todavía.</div>';
   }
   return html;
 }
 
+function coachPendingCommitmentsUSD(){
+  /* Suma todos los compromisos pendientes del mes, convertidos a un solo total en $ —
+     cada pago en Bs. se convierte con la tasa vigente en SU PROPIA fecha, no la de hoy. */
+  var totalUSD = 0;
+  var vd = getViewDate();
+  var monthPrefix = vd.getFullYear() + '-' + pad2(vd.getMonth() + 1);
+  getPaymentCategories().forEach(function(catId){
+    (state.paymentCommitments[catId] || []).forEach(function(p){
+      if (p.paid) return;
+      if (!p.date || p.date.indexOf(monthPrefix) !== 0) return;
+      var amt = Number(p.amount) || 0;
+      if (!amt) return;
+      if (p.currency === 'USD'){
+        totalUSD += amt;
+      } else {
+        var rate = getRateForDate(p.date);
+        if (rate) totalUSD += amt / rate;
+      }
+    });
+  });
+  return totalUSD;
+}
 function renderBudgetVsPaymentsCard(){
-  var sumUsd = 0, sumVes = 0;
+  var sumUsd = 0;
   Object.keys(state.budgets).forEach(function(id){
     var b = state.budgets[id];
     if (!b) return;
     sumUsd += Number(b.usd) || 0;
-    sumVes += Number(b.ves) || 0;
+    /* Si alguna categoría quedó presupuestada en Bs., se convierte a $ con la tasa de hoy
+       para que el total de presupuesto también quede expresado en una sola moneda. */
+    if (b.ves > 0){
+      var todayRate = getRateForDate(todayStr());
+      if (todayRate) sumUsd += b.ves / todayRate;
+    }
   });
-  var pending = coachPendingCommitments();
-  if (sumUsd === 0 && sumVes === 0){
+  var pendingUSD = coachPendingCommitmentsUSD();
+  if (sumUsd === 0){
     return '<div class="empty-note" style="padding-top:0">Todavía no definiste presupuestos por categoría.</div>';
   }
-  if (pending.usd === 0 && pending.ves === 0){
+  if (pendingUSD === 0){
     return '<div class="empty-note" style="padding-top:0">No tenés compromisos de pago pendientes registrados este mes.</div>';
   }
-  var html = '';
-  if (sumUsd > 0){
-    var pctU = Math.round((pending.usd / sumUsd) * 100);
-    var colorU = pctU > 80 ? 'var(--coral)' : 'var(--gold)';
-    html += '<div class="goal-card">';
-    html += '  <div class="goal-row"><span>Pagos comprometidos del Presupuesto (USD)</span><span class="goal-pct" style="color:' + colorU + '">' + pctU + '%</span></div>';
-    html += '  <div class="bar-track"><div class="bar-fill-gold" style="width:' + Math.min(100,pctU) + '%;background:' + colorU + '"></div></div>';
-    html += '  <div class="goal-numbers">' + fmt(pending.usd,'USD') + ' en pagos fijos de ' + fmt(sumUsd,'USD') + ' presupuestados — el resto queda libre para gasto variable</div>';
-    html += '</div>';
-  }
-  if (sumVes > 0){
-    var pctV = Math.round((pending.ves / sumVes) * 100);
-    var colorV = pctV > 80 ? 'var(--coral)' : 'var(--gold)';
-    html += '<div class="goal-card" style="margin-top:8px">';
-    html += '  <div class="goal-row"><span>Pagos comprometidos del Presupuesto (Bs.)</span><span class="goal-pct" style="color:' + colorV + '">' + pctV + '%</span></div>';
-    html += '  <div class="bar-track"><div class="bar-fill-gold" style="width:' + Math.min(100,pctV) + '%;background:' + colorV + '"></div></div>';
-    html += '  <div class="goal-numbers">' + fmt(pending.ves,'VES') + ' en pagos fijos de ' + fmt(sumVes,'VES') + ' presupuestados — el resto queda libre para gasto variable</div>';
-    html += '</div>';
-  }
+  var pct = Math.round((pendingUSD / sumUsd) * 100);
+  var color = pct > 80 ? 'var(--coral)' : 'var(--gold)';
+  var html = '<div class="goal-card">';
+  html += '  <div class="goal-row"><span>Pagos comprometidos del Presupuesto</span><span class="goal-pct" style="color:' + color + '">' + pct + '%</span></div>';
+  html += '  <div class="bar-track"><div class="bar-fill-gold" style="width:' + Math.min(100,pct) + '%;background:' + color + '"></div></div>';
+  html += '  <div class="goal-numbers">' + fmt(pendingUSD,'USD') + ' en pagos fijos de ' + fmt(sumUsd,'USD') + ' presupuestados — el resto queda libre para gasto variable</div>';
+  html += '  <div class="budget-note" style="margin-top:6px">Los pagos cargados en Bs. se convierten a $ con la tasa vigente en la fecha de cada pago.</div>';
+  html += '</div>';
   return html;
 }
 
@@ -2720,17 +2815,21 @@ function renderPaymentCategoryBlock(catId, defaultExpandIndex){
   var key = 'pagoscat-' + catId;
   var expanded = isGroupExpanded(key, defaultExpandIndex);
   var list = (state.paymentCommitments[catId] || []).slice().sort(function(a,b){ return a.date < b.date ? -1 : 1; });
-  var subUSD = 0, subVES = 0;
-  list.forEach(function(p){ if (p.currency==='USD') subUSD += Number(p.amount)||0; else subVES += Number(p.amount)||0; });
+  var subUSDTotal = 0, hasUnconverted = false;
+  list.forEach(function(p){
+    var amt = Number(p.amount) || 0;
+    if (!amt) return;
+    if (p.currency === 'USD'){ subUSDTotal += amt; }
+    else {
+      var r = getRateForDate(p.date);
+      if (r) subUSDTotal += amt / r; else hasUnconverted = true;
+    }
+  });
 
   html += '<button class="group-header group-header-btn" onclick="toggleGroup(\'' + key + '\',' + defaultExpandIndex + ')">';
   html += '  <span class="group-title-wrap"><span class="group-chevron ' + (expanded?'open':'') + '">' + ICONS.chevronDown + '</span><span class="group-title">' + esc(label) + '</span></span>';
-  if (subUSD > 0 || subVES > 0){
-    html += '  <span class="group-net-badge">';
-    if (subUSD > 0) html += fmt(subUSD,'USD');
-    if (subUSD > 0 && subVES > 0) html += ' + ';
-    if (subVES > 0) html += fmt(subVES,'VES');
-    html += '</span>';
+  if (subUSDTotal > 0){
+    html += '  <span class="group-net-badge">' + fmt(subUSDTotal,'USD') + (hasUnconverted ? ' +' : '') + '</span>';
   } else {
     html += '  <span class="group-net-badge">' + list.length + ' fecha' + (list.length===1?'':'s') + '</span>';
   }
@@ -2745,9 +2844,22 @@ function renderPaymentCategoryBlock(catId, defaultExpandIndex){
       html += '<div class="ledger-list" style="margin-bottom:12px">';
       list.forEach(function(p){
         var isEditing = editing && editing.id === p.id;
+        var amountDisplay = '';
+        if (p.amount){
+          if (p.currency === 'USD'){
+            amountDisplay = fmt(p.amount, 'USD');
+          } else {
+            var pRate = getRateForDate(p.date);
+            if (pRate){
+              amountDisplay = fmt(p.amount / pRate, 'USD') + ' <span style="color:var(--text-faint)">(' + fmt(p.amount,'VES') + ' a Bs. ' + pRate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ')</span>';
+            } else {
+              amountDisplay = fmt(p.amount, 'VES') + ' <span style="color:var(--text-faint)">(sin tasa de ese día para convertir a $)</span>';
+            }
+          }
+        }
         html += '<div class="tx-row" style="' + (isEditing ? 'border:1px solid var(--gold)' : '') + '">';
         html += '  <span class="tx-dot" style="background:' + (p.paid?'var(--teal)':'var(--coral)') + '"></span>';
-        html += '  <div style="flex:1;min-width:0"><div class="tx-label">' + esc(formatDayMonthShort(p.date)) + (p.person ? (' · <span style="color:' + (PAYMENT_PERSONS.find(function(x){return x.id===p.person;})||{color:'inherit'}).color + ';font-weight:600">' + esc(personLabel(p.person)) + '</span>') : '') + (p.note ? (' · ' + esc(p.note)) : '') + '</div>' + (p.amount ? ('<div class="tx-date">' + fmt(p.amount, p.currency||'VES') + budgetEquivalentInline(p.amount, p.currency||'VES') + '</div>') : '') + '</div>';
+        html += '  <div style="flex:1;min-width:0"><div class="tx-label">' + esc(formatDayMonthShort(p.date)) + (p.person ? (' · <span style="color:' + (PAYMENT_PERSONS.find(function(x){return x.id===p.person;})||{color:'inherit'}).color + ';font-weight:600">' + esc(personLabel(p.person)) + '</span>') : '') + (p.note ? (' · ' + esc(p.note)) : '') + '</div>' + (amountDisplay ? ('<div class="tx-date">' + amountDisplay + '</div>') : '') + '</div>';
         html += '  <button class="trash-btn" style="width:auto;padding:4px 8px;font-family:var(--font-mono);font-size:10px;color:' + (p.paid?'var(--teal)':'var(--coral)') + '" onclick="togglePaymentPaid(\'' + catId + '\',\'' + p.id + '\')">' + (p.paid?'Pagado':'Pendiente') + '</button>';
         html += '  <button class="trash-btn" onclick="editPaymentDate(\'' + catId + '\',\'' + p.id + '\')" title="Editar">' + ICONS.edit + '</button>';
         html += '  <button class="trash-btn" onclick="deletePaymentDate(\'' + catId + '\',\'' + p.id + '\')" title="Eliminar">' + ICONS.trash + '</button>';
