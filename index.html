@@ -1820,8 +1820,6 @@ function render(){
   html += '  <div style="display:flex;align-items:center;gap:8px">' + renderSyncBadge() + '<span style="color:var(--gold)">' + ICONS.wallet2 + '</span></div>';
   html += '</div>';
 
-  html += renderTransactionSummary();
-
   if (state.saveError){
     html += '<div class="warn-banner">No se pudo guardar en este navegador. Revisa que no estés en modo privado.</div>';
   }
@@ -1858,18 +1856,6 @@ function render(){
   root.innerHTML = html;
 
   if (state.showForm) renderFormSheet();
-}
-
-function renderTransactionSummary(){
-  var totals = getMonthTotalsUSD(state.transactions);
-  var income = totals.incomeUSD;
-  var expense = totals.expenseUSD;
-  var net = round2(income - expense);
-  return '<section class="transaction-summary" aria-label="Resumen de transacciones">'
-    + '<div class="transaction-summary-card income"><span class="transaction-summary-label">Ingresos Totales</span><strong class="transaction-summary-value">' + fmt(income, 'USD') + '</strong></div>'
-    + '<div class="transaction-summary-card expense"><span class="transaction-summary-label">Gastos Totales</span><strong class="transaction-summary-value">' + fmt(expense, 'USD') + '</strong></div>'
-    + '<div class="transaction-summary-card net"><span class="transaction-summary-label">Saldo Neto</span><strong class="transaction-summary-value">' + (net < 0 ? '− ' : '') + fmt(net, 'USD') + '</strong></div>'
-    + '</section>';
 }
 
 function renderRateBar(){
