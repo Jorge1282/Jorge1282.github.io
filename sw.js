@@ -1,5 +1,5 @@
 /* Tu Bolsillo — service worker */
-var CACHE_NAME = 'tu-bolsillo-v1';
+var CACHE_NAME = 'tu-bolsillo-v2';
 var APP_SHELL = [
   './',
   './index.html',
@@ -46,15 +46,16 @@ self.addEventListener('fetch', function(event){
     return;
   }
 
-  // Resto de assets propios: caché primero, red de respaldo
+  // Resto de assets propios: red primero, caché de respaldo para uso offline
   event.respondWith(
-    caches.match(req).then(function(cached){
-      if (cached) return cached;
-      return fetch(req).then(function(res){
+    fetch(req).then(function(res){
+      if (res.ok){
         var copy = res.clone();
-        caches.open(CACHE_NAME).then(function(cache){ cache.put(req, copy); });
-        return res;
-      });
+        caches.open(CACHE_NAME).then(function(cache){ return cache.put(req, copy); });
+      }
+      return res;
+    }).catch(function(){
+      return caches.match(req);
     })
   );
 });
