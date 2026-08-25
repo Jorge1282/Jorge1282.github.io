@@ -202,6 +202,19 @@
   .lock-input { text-align: center; font-size: 22px; letter-spacing: 8px; max-width: 200px; font-family: var(--font-mono); }
   .lock-error { color: var(--coral); font-size: 12px; margin-top: 10px; }
   .lock-btn { max-width: 200px; margin-top: 18px; }
+  .primary-btn { min-height: 48px; }
+  .segment-btn { min-height: 48px; }
+  .transaction-summary { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0 0 16px; }
+  .transaction-summary-card { min-height: 92px; padding: 14px; background: var(--surface); border-radius: 8px; border-top: 3px solid var(--gold); }
+  .transaction-summary-card.income { border-color: var(--teal); }
+  .transaction-summary-card.expense { border-color: var(--coral); }
+  .transaction-summary-card.net { border-color: var(--gold); }
+  .transaction-summary-label { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
+  .transaction-summary-value { display: block; margin-top: 8px; font-family: var(--font-mono); font-size: 20px; font-weight: 700; }
+  .transaction-summary-card.income .transaction-summary-value { color: var(--teal); }
+  .transaction-summary-card.expense .transaction-summary-value { color: var(--coral); }
+  .transaction-summary-card.net .transaction-summary-value { color: var(--gold); }
+  @media (min-width: 360px) { .transaction-summary { grid-template-columns: repeat(3, 1fr); } .transaction-summary-card { min-height: 104px; } .transaction-summary-value { font-size: 17px; } }
 </style>
 </head>
 <body>
@@ -1229,9 +1242,10 @@ function getMonthTotalsUSD(monthTx){
   monthTx.forEach(function(tx){
     var r = txAmountUSD(tx);
     if (!r.converted){ anyUnconverted = true; return; }
-    if (tx.type === 'ingreso') incomeUSD += r.value; else expenseUSD += Math.abs(r.value);
+    if (tx.type === 'ingreso') incomeUSD = round2(incomeUSD + r.value);
+    else expenseUSD = round2(expenseUSD + Math.abs(r.value));
   });
-  return { incomeUSD: incomeUSD, expenseUSD: expenseUSD, anyUnconverted: anyUnconverted };
+  return { incomeUSD: round2(incomeUSD), expenseUSD: round2(expenseUSD), anyUnconverted: anyUnconverted };
 }
 function getCategoryBreakdown(monthTx){
   var map = {};
@@ -1506,10 +1520,15 @@ function signedAmount(tx){
   return sign * (Number(tx.amount) || 0);
 }
 
+function round2(n){
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 function getCurrentBalance(){
-  var usd = state.initialBalance.usd, ves = state.initialBalance.ves;
+  var usd = round2(state.initialBalance.usd), ves = round2(state.initialBalance.ves);
   state.transactions.forEach(function(tx){
-    if (tx.currency === 'USD') usd += signedAmount(tx); else ves += signedAmount(tx);
+    if (tx.currency === 'USD') usd = round2(usd + signedAmount(tx));
+    else ves = round2(ves + signedAmount(tx));
   });
   return { usd: usd, ves: ves };
 }
@@ -1528,25 +1547,27 @@ function getDailyBalances(){
   var dailyNet = {};
   state.transactions.forEach(function(tx){
     dailyNet[tx.date] = dailyNet[tx.date] || { usd: 0, ves: 0, count: 0 };
-    dailyNet[tx.date][tx.currency === 'USD' ? 'usd' : 'ves'] += signedAmount(tx);
+    var currencyKey = tx.currency === 'USD' ? 'usd' : 'ves';
+    dailyNet[tx.date][currencyKey] = round2(dailyNet[tx.date][currencyKey] + signedAmount(tx));
     dailyNet[tx.date].count += 1;
   });
 
-  var runningUSD = state.initialBalance.usd, runningVES = state.initialBalance.ves;
+  var runningUSD = round2(state.initialBalance.usd), runningVES = round2(state.initialBalance.ves);
   var sortedDates = state.transactions.map(function(t){ return t.date; }).sort();
   var earliestDate = sortedDates.length ? sortedDates[0] : monthStart;
   var openingRate = getRateForDate(earliestDate < monthStart ? earliestDate : monthStart);
-  var runningCombined = state.initialBalance.usd + (openingRate ? state.initialBalance.ves / openingRate : 0);
+  var runningCombined = round2(state.initialBalance.usd + (openingRate ? state.initialBalance.ves / openingRate : 0));
 
   var priorTx = state.transactions.filter(function(t){ return t.date < monthStart; }).sort(function(a,b){ return a.date < b.date ? -1 : 1; });
   priorTx.forEach(function(tx){
     var amt = signedAmount(tx);
     if (tx.currency === 'USD'){
-      runningUSD += amt; runningCombined += amt;
+      runningUSD = round2(runningUSD + amt);
+      runningCombined = round2(runningCombined + amt);
     } else {
-      runningVES += amt;
+      runningVES = round2(runningVES + amt);
       var r = getRateForDate(tx.date);
-      if (r) runningCombined += amt / r;
+      if (r) runningCombined = round2(runningCombined + amt / r);
     }
   });
 
@@ -1555,11 +1576,11 @@ function getDailyBalances(){
     var dateStr = year + '-' + pad2(month + 1) + '-' + pad2(d);
     var net = dailyNet[dateStr] || { usd: 0, ves: 0, count: 0 };
     var dayRate = getRateForDate(dateStr);
-    var netCombined = net.usd + (dayRate ? net.ves / dayRate : 0);
-    runningUSD += net.usd;
-    runningVES += net.ves;
-    runningCombined += netCombined;
-    rows.push({ date: dateStr, day: d, netUSD: net.usd, netVES: net.ves, hasTx: net.count > 0, balanceUSD: runningUSD, balanceVES: runningVES, dayRate: dayRate, netCombined: netCombined, balanceCombined: runningCombined });
+    var netCombined = round2(net.usd + (dayRate ? net.ves / dayRate : 0));
+    runningUSD = round2(runningUSD + net.usd);
+    runningVES = round2(runningVES + net.ves);
+    runningCombined = round2(runningCombined + netCombined);
+    rows.push({ date: dateStr, day: d, netUSD: round2(net.usd), netVES: round2(net.ves), hasTx: net.count > 0, balanceUSD: runningUSD, balanceVES: runningVES, dayRate: dayRate, netCombined: netCombined, balanceCombined: runningCombined });
   }
   return rows;
 }
@@ -1799,6 +1820,8 @@ function render(){
   html += '  <div style="display:flex;align-items:center;gap:8px">' + renderSyncBadge() + '<span style="color:var(--gold)">' + ICONS.wallet2 + '</span></div>';
   html += '</div>';
 
+  html += renderTransactionSummary();
+
   if (state.saveError){
     html += '<div class="warn-banner">No se pudo guardar en este navegador. Revisa que no estés en modo privado.</div>';
   }
@@ -1835,6 +1858,18 @@ function render(){
   root.innerHTML = html;
 
   if (state.showForm) renderFormSheet();
+}
+
+function renderTransactionSummary(){
+  var totals = getMonthTotalsUSD(state.transactions);
+  var income = totals.incomeUSD;
+  var expense = totals.expenseUSD;
+  var net = round2(income - expense);
+  return '<section class="transaction-summary" aria-label="Resumen de transacciones">'
+    + '<div class="transaction-summary-card income"><span class="transaction-summary-label">Ingresos Totales</span><strong class="transaction-summary-value">' + fmt(income, 'USD') + '</strong></div>'
+    + '<div class="transaction-summary-card expense"><span class="transaction-summary-label">Gastos Totales</span><strong class="transaction-summary-value">' + fmt(expense, 'USD') + '</strong></div>'
+    + '<div class="transaction-summary-card net"><span class="transaction-summary-label">Saldo Neto</span><strong class="transaction-summary-value">' + (net < 0 ? '− ' : '') + fmt(net, 'USD') + '</strong></div>'
+    + '</section>';
 }
 
 function renderRateBar(){
@@ -1974,29 +2009,29 @@ function renderPaymentAlerts(){
 
 function renderResumen(totals, breakdown){
   var monthTx = getMonthTx();
-  var balanceUSD = totals.incomeUSD - totals.expenseUSD;
-  var balanceVES = totals.incomeVES - totals.expenseVES;
+  var balanceUSD = round2(totals.incomeUSD - totals.expenseUSD);
+  var balanceVES = round2(totals.incomeVES - totals.expenseVES);
   var saldo = getCurrentBalance();
   var opening = getMonthOpeningBalance();
-  var closingUSD = opening.usd + balanceUSD;
-  var closingVES = opening.ves + balanceVES;
+  var closingUSD = round2(opening.usd + balanceUSD);
+  var closingVES = round2(opening.ves + balanceVES);
 
   // ---- CÁLCULOS DE COMBINADO EN USD (con tasa histórica por transacción) ----
   var totalsUSD = getMonthTotalsUSD(monthTx);
-  var incomeCombinedUSD = totalsUSD.incomeUSD;      // total ingresos en USD (convirtiendo cada VES con su tasa)
-  var expenseCombinedUSD = totalsUSD.expenseUSD;    // total egresos en USD (convirtiendo cada VES con su tasa)
+  var incomeCombinedUSD = round2(totalsUSD.incomeUSD);      // total ingresos en USD (convirtiendo cada VES con su tasa)
+  var expenseCombinedUSD = round2(totalsUSD.expenseUSD);    // total egresos en USD (convirtiendo cada VES con su tasa)
 
   // Saldo disponible al inicio del mes en USD (restando ahorro)
   var ahorroApartado = state.currentSavings.monthly;
   var vdForOpening2 = getViewDate();
   var monthStartStr2 = vdForOpening2.getFullYear() + '-' + pad2(vdForOpening2.getMonth()+1) + '-01';
   var ahorroAlInicioMes = getSavingsAtDate('monthly', monthStartStr2);
-  var openingAvailableUSD = opening.usd - ahorroAlInicioMes.usd;
-  var openingAvailableVES = opening.ves - ahorroAlInicioMes.ves;
+  var openingAvailableUSD = round2(opening.usd - ahorroAlInicioMes.usd);
+  var openingAvailableVES = round2(opening.ves - ahorroAlInicioMes.ves);
   var openingRate = getRateForDate(monthStartStr2);
-  var openingAvailableCombined = openingAvailableUSD + (openingRate ? openingAvailableVES / openingRate : 0);
+  var openingAvailableCombined = round2(openingAvailableUSD + (openingRate ? openingAvailableVES / openingRate : 0));
   // Ingresos totales (disponible + ingresos) combinados
-  var totalIncomeCombinedUSD = openingAvailableCombined + incomeCombinedUSD;
+  var totalIncomeCombinedUSD = round2(openingAvailableCombined + incomeCombinedUSD);
 
   // ---- HTML ----
   var html = '';
@@ -2027,8 +2062,8 @@ function renderResumen(totals, breakdown){
   html += '</div>';
 
   // Resto del resumen sin cambios
-  var parcialUSD = saldo.usd - (ahorroApartado.usd || 0);
-  var parcialVES = saldo.ves - (ahorroApartado.ves || 0);
+  var parcialUSD = round2(saldo.usd - (ahorroApartado.usd || 0));
+  var parcialVES = round2(saldo.ves - (ahorroApartado.ves || 0));
   html += '<div class="saldo-card" style="border-color:rgba(111,169,141,0.35);background:linear-gradient(135deg, rgba(111,169,141,0.12), var(--surface-2))">';
   html += '  <div class="balance-line"><span>Saldo Parcial (Disponible)</span><span style="color:var(--teal)">' + ICONS.wallet + '</span></div>';
   html += '  <div class="balance-equal-row">';
@@ -3108,5 +3143,6 @@ if ('serviceWorker' in navigator){
   }).catch(function(e){ console.error('SW register error', e); });
 }
 </script>
+<script type="module" src="./src/storage.js"></script>
 </body>
 </html>
