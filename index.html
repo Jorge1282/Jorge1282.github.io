@@ -969,7 +969,6 @@ function initFirebaseSync(){
     state.syncStatus = 'connecting';
     firebase.initializeApp(FIREBASE_CONFIG);
     var db = firebase.firestore();
-    try { db.enablePersistence({ synchronizeTabs: true }).catch(function(){}); } catch(e){}
     familyDocRef = db.collection('tu_bolsillo_app').doc(FAMILY_CODE);
     fbReady = true;
     familyDocRef.onSnapshot(function(snap){

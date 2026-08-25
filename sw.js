@@ -12,7 +12,11 @@ self.addEventListener('install', function(event){
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache){
-      return cache.addAll(APP_SHELL);
+      var cacheableShell = APP_SHELL.filter(function(path){
+        var url = new URL(path, self.location.href);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+      });
+      return cache.addAll(cacheableShell);
     })
   );
 });
@@ -30,6 +34,7 @@ self.addEventListener('fetch', function(event){
   if (req.method !== 'GET') return;
 
   var url = new URL(req.url);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
   if (url.origin !== self.location.origin) return; // deja pasar Firebase, BCV, ExcelJS, etc. sin tocar
 
   // Documentos (navegación): red primero, con respaldo en caché si no hay internet
