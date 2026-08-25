@@ -2036,18 +2036,6 @@ function renderResumen(totals, breakdown){
   // ---- HTML ----
   var html = '';
 
-  // Primera fila: INGRESOS y EGRESOS (solo USD)
-  html += '<div class="stat-grid">';
-  html += '  <div class="stat-card" style="border-color:var(--teal)">';
-  html += '    <div class="stat-card-head"><span>INGRESOS</span><span style="color:var(--teal)">' + ICONS.up + '</span></div>';
-  html += '    <div class="stat-main" style="color:var(--teal)">' + fmt(incomeCombinedUSD, 'USD') + '</div>';
-  html += '  </div>';
-  html += '  <div class="stat-card" style="border-color:var(--coral)">';
-  html += '    <div class="stat-card-head"><span>EGRESOS</span><span style="color:var(--coral)">' + ICONS.down + '</span></div>';
-  html += '    <div class="stat-main" style="color:var(--coral)">' + fmt(expenseCombinedUSD, 'USD') + '</div>';
-  html += '  </div>';
-  html += '</div>';
-
   // Segunda fila: "Disponible al Inicio del Mes + Ingresos vs. Egresos" (solo USD)
   html += '<div style="font-size:11px;letter-spacing:0.6px;color:var(--text-faint);text-transform:uppercase;margin:2px 2px 6px">Disponible al Inicio del Mes + Ingresos vs. Egresos</div>';
   html += '<div class="stat-grid">';
