@@ -202,19 +202,6 @@
   .lock-input { text-align: center; font-size: 22px; letter-spacing: 8px; max-width: 200px; font-family: var(--font-mono); }
   .lock-error { color: var(--coral); font-size: 12px; margin-top: 10px; }
   .lock-btn { max-width: 200px; margin-top: 18px; }
-  .primary-btn { min-height: 48px; }
-  .segment-btn { min-height: 48px; }
-  .transaction-summary { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0 0 16px; }
-  .transaction-summary-card { min-height: 92px; padding: 14px; background: var(--surface); border-radius: 8px; border-top: 3px solid var(--gold); }
-  .transaction-summary-card.income { border-color: var(--teal); }
-  .transaction-summary-card.expense { border-color: var(--coral); }
-  .transaction-summary-card.net { border-color: var(--gold); }
-  .transaction-summary-label { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
-  .transaction-summary-value { display: block; margin-top: 8px; font-family: var(--font-mono); font-size: 20px; font-weight: 700; }
-  .transaction-summary-card.income .transaction-summary-value { color: var(--teal); }
-  .transaction-summary-card.expense .transaction-summary-value { color: var(--coral); }
-  .transaction-summary-card.net .transaction-summary-value { color: var(--gold); }
-  @media (min-width: 360px) { .transaction-summary { grid-template-columns: repeat(3, 1fr); } .transaction-summary-card { min-height: 104px; } .transaction-summary-value { font-size: 17px; } }
 </style>
 </head>
 <body>
@@ -3117,6 +3104,5 @@ if ('serviceWorker' in navigator){
   }).catch(function(e){ console.error('SW register error', e); });
 }
 </script>
-<script type="module" src="./src/storage.js"></script>
 </body>
 </html>
