@@ -2286,8 +2286,8 @@ function renderGoalRing(pct, colorOverride){
 }
 
 function renderGoalRingCard(label, saved, startAmt, goalIncrement, currency){
-  var progress = round2(saved - startAmt);
-  var pct = goalIncrement > 0 ? Math.round((progress / goalIncrement) * 100) : 0;
+  var totalTarget = round2(saved + goalIncrement);
+  var pct = goalIncrement > 0 && totalTarget > 0 ? Math.round((saved / totalTarget) * 100) : 0;
   var isNegative = saved < 0;
   var amountColor = isNegative ? 'var(--coral)' : 'var(--text)';
   var html = '<div class="goal-ring-card">';
@@ -2296,7 +2296,7 @@ function renderGoalRingCard(label, saved, startAmt, goalIncrement, currency){
   html += '    <div class="goal-ring-label">' + esc(label) + '</div>';
   html += '    <div class="goal-ring-numbers" style="color:' + amountColor + '">' + (isNegative ? '− ' : '+ ') + fmt(saved, currency) + '</div>';
   if (goalIncrement > 0){
-    html += '    <div class="goal-ring-of">' + (startAmt > 0 ? 'Progreso del mes: ' : 'Progreso: ') + fmt(progress, currency) + ' de ' + fmt(goalIncrement, currency) + ' adicionales</div>';
+    html += '    <div class="goal-ring-of">Progreso: ' + fmt(saved, currency) + ' de ' + fmt(totalTarget, currency) + ' (Meta Total)</div>';
   } else {
     html += '    <div class="goal-ring-of">Sin meta definida</div>';
   }
