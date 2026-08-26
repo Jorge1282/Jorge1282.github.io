@@ -2285,18 +2285,20 @@ function renderGoalRing(pct, colorOverride){
   return svg;
 }
 
-function renderGoalRingCard(label, saved, totalTarget, currency, startAmt, goalIncrement){
-  var pct = totalTarget > 0 ? Math.round((saved / totalTarget) * 100) : 0;
+function renderGoalRingCard(label, saved, startAmt, goalIncrement, currency){
+  var progress = round2(saved - startAmt);
+  var pct = goalIncrement > 0 ? Math.round((progress / goalIncrement) * 100) : 0;
   var isNegative = saved < 0;
   var amountColor = isNegative ? 'var(--coral)' : 'var(--text)';
   var html = '<div class="goal-ring-card">';
-  html += '  ' + (totalTarget > 0 ? renderGoalRing(pct) : renderGoalRing(0, 'var(--text-faint)'));
+  html += '  ' + (goalIncrement > 0 ? renderGoalRing(pct) : renderGoalRing(0, 'var(--text-faint)'));
   html += '  <div class="goal-ring-body">';
   html += '    <div class="goal-ring-label">' + esc(label) + '</div>';
   html += '    <div class="goal-ring-numbers" style="color:' + amountColor + '">' + (isNegative ? '− ' : '+ ') + fmt(saved, currency) + '</div>';
-  html += '    <div class="goal-ring-of">' + (totalTarget > 0 ? ('Meta Total: ' + fmt(totalTarget, currency)) : 'Sin Meta Definida') + '</div>';
-  if (startAmt !== undefined && goalIncrement !== undefined && goalIncrement > 0){
-    html += '    <div class="goal-ring-of">' + fmt(startAmt, currency) + ' + ' + fmt(goalIncrement, currency) + ' Nuevos = ' + fmt(startAmt + goalIncrement, currency) + '</div>';
+  if (goalIncrement > 0){
+    html += '    <div class="goal-ring-of">' + (startAmt > 0 ? 'Progreso del mes: ' : 'Progreso: ') + fmt(progress, currency) + ' de ' + fmt(goalIncrement, currency) + ' adicionales</div>';
+  } else {
+    html += '    <div class="goal-ring-of">Sin meta definida</div>';
   }
   html += '  </div>';
   html += '</div>';
@@ -2335,7 +2337,7 @@ function renderAhorroForm(period){
   var html = '<div class="section-label" style="margin-top:22px">Ajustar mi ahorro</div>';
   html += '<div class="ahorro-form-card">';
   html += '  <div class="ahorro-form-row"><label class="form-label">Ahorro Actual (total) en USD</label><input class="input" type="number" inputmode="decimal" placeholder="$" id="ahorroCurrentUsd_' + period + '" value="' + (s.usd||'') + '"></div>';
-  html += '  <div class="ahorro-form-row"><label class="form-label">Cuánto MÁS quieres Ahorrar en USD</label><input class="input" type="number" inputmode="decimal" placeholder="$" id="ahorroGoalUsd_' + period + '" value="' + (g.usd||'') + '"></div>';
+  html += '  <div class="ahorro-form-row"><label class="form-label">Meta adicional de este mes (USD)</label><input class="input" type="number" inputmode="decimal" placeholder="$ adicionales" id="ahorroGoalUsd_' + period + '" value="' + (g.usd||'') + '"></div>';
   if (metaTotalUsd > 0){
     html += '  <div class="ahorro-meta-total">Deberías Tener ' + fmt(metaTotalUsd,'USD') + ' Ahorrado a Fin de Período</div>';
   }
@@ -2359,7 +2361,6 @@ function renderMetasMensual(totals){
   var s = state.currentSavings.monthly;
   var st = state.savingsStart.monthly;
   var g = state.goal.monthly;
-  var totalTargetUSD = st.usd + g.usd;
 
   // ---- Cálculo de ingresos combinados (igual que en el resumen) ----
   var totalsUSD = getMonthTotalsUSD(monthTx);
@@ -2372,7 +2373,7 @@ function renderMetasMensual(totals){
   var monthStartStr = vdForOpening.getFullYear() + '-' + pad2(vdForOpening.getMonth()+1) + '-01';
   var ahorroAlInicio = getSavingsAtDate('monthly', monthStartStr);
   var openingAvailableUSD = opening.usd - ahorroAlInicio.usd;
-  var openingAvailableVES = opening.ves - ahorroAlInicio.ves;
+  var openingAvailableVES = opening.ves;
   var openingRate = getRateForDate(monthStartStr);
   var openingAvailableCombined = openingAvailableUSD + (openingRate ? openingAvailableVES / openingRate : 0);
   var totalIncomeCombinedUSD = openingAvailableCombined + incomeCombinedUSD;
@@ -2392,7 +2393,7 @@ function renderMetasMensual(totals){
   var html = '';
   html += renderCollapsibleSection('metas-ingreso-presupuesto', 'Ingreso y Presupuesto Familiar', null, 0, ingresoPresupuestoHtml);
 
-  var ahorroHtml = renderGoalRingCard('Ahorro Actual (USD)', s.usd, totalTargetUSD, 'USD', st.usd, g.usd)
+  var ahorroHtml = renderGoalRingCard('Ahorro Actual (USD)', s.usd, st.usd, g.usd, 'USD')
     + renderAhorroForm('monthly');
   html += renderCollapsibleSection('metas-ahorro-mes', 'Meta Ahorro del Mes', null, -1, ahorroHtml);
 
@@ -2566,7 +2567,6 @@ function renderMetasSemanal(monthTx){
   var g = state.goal.weekly;
   var s = state.currentSavings.weekly;
   var st = state.savingsStart.weekly;
-  var totalTargetUSD = st.usd + g.usd;
   var weeks = groupTxByWeek(monthTx);
   var todayMonday = mondayOf(todayStr());
   var currentWeek = weeks.find(function(w){ return w.start === todayMonday; });
@@ -2574,7 +2574,7 @@ function renderMetasSemanal(monthTx){
   var otherWeeks = weeks.filter(function(w){ return w.start !== todayMonday; });
 
   var html = '<div class="section-label">Esta semana (' + currentWeekLabel + ')</div>';
-  html += renderGoalRingCard('Ahorro Actual (USD)', s.usd, totalTargetUSD, 'USD', st.usd, g.usd);
+  html += renderGoalRingCard('Ahorro Actual (USD)', s.usd, st.usd, g.usd, 'USD');
   html += renderAhorroForm('weekly');
 
   html += '<div class="section-label" style="margin-top:22px">Semanas anteriores (ingresos − egresos)</div>';
