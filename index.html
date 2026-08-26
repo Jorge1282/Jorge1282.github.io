@@ -351,6 +351,7 @@ var STORAGE_KEY_SAVINGS_START = 'ff_savings_start_v1';
 var STORAGE_KEY_NOTIFIED = 'ff_notified_log_v1';
 var STORAGE_KEY_INCOME_GOAL = 'ff_income_goal_v1';
 var STORAGE_KEY_CATEGORIES = 'ff_custom_categories_v1';
+var STORAGE_KEY_UPDATED_AT = 'ff_updated_at_v1';
 var BCV_ENDPOINTS = [
   'https://bcv.today/api/v1/rate.json',
   'https://cdn.jsdelivr.net/gh/grupoclip/bcv-api/api/v1/rate.json'
@@ -403,7 +404,9 @@ var state = {
   familyIncomeGoal: { usd: 0, ves: 0 },
   customCategories: { expense: [], income: [] },
   showNewCategoryInput: false,
-  editingCategory: null
+  editingCategory: null,
+  localUpdatedAt: 0,
+  localWritePending: false
 };
 
 function loadData(){
@@ -413,7 +416,9 @@ function loadData(){
       var parsed = JSON.parse(raw);
       state.transactions = parsed.transactions || [];
       state.goal = normalizeGoal(parsed.goal);
+      state.localUpdatedAt = Number(parsed.updatedAt) || 0;
     }
+    if (!state.localUpdatedAt) state.localUpdatedAt = Number(localStorage.getItem(STORAGE_KEY_UPDATED_AT)) || 0;
   } catch(e){ console.error('load error', e); }
 }
 function normalizeGoal(g){
@@ -428,9 +433,15 @@ function normalizeGoal(g){
   /* meta antigua (solo mensual, sin anidar) */
   return { monthly: { usd: g.usd||0, ves: g.ves||0 }, weekly: {usd:0,ves:0}, daily: {usd:0,ves:0} };
 }
-function saveData(){
+function saveData(updatedAt){
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ transactions: state.transactions, goal: state.goal }));
+    var data = { transactions: state.transactions, goal: state.goal };
+    if (updatedAt !== undefined) {
+      state.localUpdatedAt = Number(updatedAt) || 0;
+      data.updatedAt = state.localUpdatedAt;
+      localStorage.setItem(STORAGE_KEY_UPDATED_AT, String(state.localUpdatedAt));
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     state.saveError = false;
   } catch(e){
     console.error('save error', e);
@@ -955,6 +966,12 @@ var familyDocRef = null;
 var fbReady = false;
 var suppressNextPush = false;
 
+function timestampMillis(value){
+  if (!value) return 0;
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  return Number(value) || 0;
+}
+
 function isFirebaseConfigured(){
   return FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.indexOf('TU_') !== 0 &&
          FAMILY_CODE && FAMILY_CODE.indexOf('CAMBIA') !== 0;
@@ -974,6 +991,9 @@ function initFirebaseSync(){
     familyDocRef.onSnapshot(function(snap){
       if (snap.exists){
         var data = snap.data() || {};
+        var remoteUpdatedAt = timestampMillis(data.updatedAt);
+        if (state.localWritePending && (!remoteUpdatedAt || remoteUpdatedAt <= state.localUpdatedAt)) return;
+        if (remoteUpdatedAt && remoteUpdatedAt < state.localUpdatedAt) return;
         state.transactions = data.transactions || [];
         state.goal = normalizeGoal(data.goal);
         state.initialBalance = data.initialBalance || { usd: 0, ves: 0 };
@@ -992,7 +1012,9 @@ function initFirebaseSync(){
           try { localStorage.setItem(STORAGE_KEY_PIN, data.pinHash); } catch(e){}
         }
         state.syncStatus = 'synced';
-        saveData();
+        state.localUpdatedAt = remoteUpdatedAt || state.localUpdatedAt;
+        state.localWritePending = false;
+        saveData(state.localUpdatedAt);
         try { localStorage.setItem(STORAGE_KEY_BALANCE, JSON.stringify(state.initialBalance)); } catch(e){}
         try { localStorage.setItem(STORAGE_KEY_BUDGETS, JSON.stringify(state.budgets)); } catch(e){}
         try { localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(state.paymentCommitments)); } catch(e){}
@@ -1013,7 +1035,11 @@ function initFirebaseSync(){
 }
 function pushToCloud(){
   if (!fbReady || !familyDocRef) return;
-  familyDocRef.set({
+  var localUpdatedAt = Date.now();
+  state.localUpdatedAt = Math.max(state.localUpdatedAt, localUpdatedAt);
+  state.localWritePending = true;
+  saveData(state.localUpdatedAt);
+  var cloudData = {
     transactions: state.transactions,
     goal: state.goal,
     initialBalance: state.initialBalance,
@@ -1026,10 +1052,16 @@ function pushToCloud(){
     familyIncomeGoal: state.familyIncomeGoal,
     pinHash: state.pinHash || null,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  familyDocRef.update(cloudData).catch(function(error){
+    if (error && error.code === 'not-found') return familyDocRef.set(cloudData, { merge: true });
+    throw error;
   }).then(function(){
+    state.localWritePending = false;
     state.syncStatus = 'synced';
     render();
   }).catch(function(e){
+    state.localWritePending = false;
     console.error('push to cloud error', e);
     state.syncStatus = 'error';
     render();
