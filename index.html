@@ -1426,6 +1426,44 @@ function getFinancialScore(){
   var savingsRate = incomeCombined > 0 ? (savingsCombined / incomeCombined) * 100 : null;
   return { score: score, band: band, incomeCombined: incomeCombined, expenseCombined: expenseCombined, netCombined: netCombined, openingAvailableCombined: openingAvailableCombined, incomeWithOpeningCombined: incomeWithOpeningCombined, netWithOpeningCombined: netWithOpeningCombined, availableCombined: availableCombined, pendingCombined: pendingCombined, savingsCombined: savingsCombined, savingsMonths: savingsMonths, debtRatio: debtRatio, savingsRate: savingsRate };
 }
+function getBudgetCategoryType(categoryId){
+  var essentialIds = ['arriendo','alimentos','salud','servicios','condominio','colegio','combustible','credito_jorge','credito_sheila','mantenimiento','telefono'];
+  var savingIds = ['inversion','inversiones','acciones','fondo_inversion'];
+  if (essentialIds.indexOf(categoryId) !== -1) return 'essential';
+  if (savingIds.indexOf(categoryId) !== -1) return 'saving';
+  return 'want';
+}
+function getBudgetRuleAnalysis(){
+  var rate = Number(state.bcvRate.usd) || 0;
+  var essential = 0;
+  var want = 0;
+  var investment = 0;
+  Object.keys(state.budgets).forEach(function(id){
+    var budget = state.budgets[id] || {};
+    var amount = round2(Number(budget.usd) || 0);
+    if (rate > 0) amount = round2(amount + ((Number(budget.ves) || 0) / rate));
+    var type = getBudgetCategoryType(id);
+    if (type === 'essential') essential = round2(essential + amount);
+    else if (type === 'saving') investment = round2(investment + amount);
+    else want = round2(want + amount);
+  });
+  var savings = round2(Number(state.currentSavings.monthly.usd) || 0);
+  var savingAndInvestment = round2(savings + investment);
+  var total = round2(essential + want + savingAndInvestment);
+  var essentialPct = total > 0 ? round2((essential / total) * 100) : 0;
+  var wantPct = total > 0 ? round2((want / total) * 100) : 0;
+  var savingPct = total > 0 ? round2((savingAndInvestment / total) * 100) : 0;
+  var messages = [];
+  if (essentialPct > 50) messages.push('Necesidades están en ' + essentialPct + '% (límite 50%).');
+  if (wantPct > 30) messages.push('Deseos están en ' + wantPct + '% (límite 30%).');
+  if (savingPct < 20) messages.push('Ahorro e inversión están en ' + savingPct + '% (meta mínima 20%).');
+  return {
+    essential: essential, want: want, investment: investment, savings: savings,
+    savingAndInvestment: savingAndInvestment, total: total,
+    essentialPct: essentialPct, wantPct: wantPct, savingPct: savingPct,
+    message: messages.join(' ')
+  };
+}
 function getCoachInsights(){
   var m = getFinancialScore();
   var monthTx = getMonthTx();
@@ -1508,6 +1546,11 @@ function getCoachInsights(){
       var proyTxt = (proj.proyectadoUSD>0?fmt(proj.proyectadoUSD,'USD'):'') + (proj.proyectadoUSD>0&&proj.proyectadoVES>0?' y ':'') + (proj.proyectadoVES>0?fmt(proj.proyectadoVES,'VES'):'');
       insights.push({ level:'warning', title:'Al ritmo actual, vas a cerrar el mes por encima de tu ingreso', body:'Llevás gastado ' + gastadoTxt + ' en ' + proj.diasTranscurridos + ' de ' + proj.diasTotales + ' días. Proyectado a fin de mes: ≈ ' + proyTxt + '.' });
     }
+  }
+
+  var budgetRule = getBudgetRuleAnalysis();
+  if (budgetRule.message){
+    insights.push({ level:'warning', title:'La distribución se aleja de la regla 50/30/20', body:budgetRule.message });
   }
 
   var order = { danger: 0, warning: 1, info: 2, success: 3 };
@@ -3028,6 +3071,7 @@ function renderCoach(){
   var m = getFinancialScore();
   var insights = getCoachInsights();
   var tip = getCoachTipOfDay();
+  var budgetRule = getBudgetRuleAnalysis();
 
   var html = '<div class="section-label">Coach Financiero</div>';
   html += '<div class="empty-note" style="padding-top:0">Un diagnóstico de tus finanzas basado en tus propios datos, calculado en este mismo teléfono. Te ayuda a ver patrones, no reemplaza asesoría profesional para decisiones grandes.</div>';
@@ -3058,6 +3102,17 @@ function renderCoach(){
     html += '    <div style="font-size:9.5px;color:var(--text-faint);margin-top:2px">solo en el mes actual</div>';
   }
   html += '  </div>';
+  html += '</div>';
+
+  html += '<div class="goal-card" style="margin-top:12px">';
+  html += '  <div class="goal-row"><span style="font-weight:700">Regla 50/30/20</span><span class="goal-pct">' + budgetRule.total.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' USD</span></div>';
+  [{label:'Necesidades', pct:budgetRule.essentialPct, color:'var(--teal)'},{label:'Deseos', pct:budgetRule.wantPct, color:'var(--coral)'},{label:'Ahorro e Inversión', pct:budgetRule.savingPct, color:'var(--gold)'}].forEach(function(item){
+    var width = Math.max(0, Math.min(100, item.pct));
+    html += '  <div style="margin-top:12px">';
+    html += '    <div class="goal-row" style="margin-bottom:5px"><span style="font-size:12px;color:var(--text-dim)">' + item.label + '</span><span class="goal-pct" style="color:' + item.color + '">' + item.pct + '%</span></div>';
+    html += '    <div class="bar-track"><div class="bar-fill" style="width:' + width + '%;background:' + item.color + '"></div></div>';
+    html += '  </div>';
+  });
   html += '</div>';
 
   if (insights.length === 0){
