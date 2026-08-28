@@ -2406,9 +2406,9 @@ function renderMetasMensual(totals){
 
   var ingresoPresupuestoHtml = '';
   ingresoPresupuestoHtml += '<div class="section-label" style="margin-top:0">Ingreso Familiar: Meta vs Real</div>';
-  ingresoPresupuestoHtml += renderIncomeMetaVsRealCard(totals);
+  ingresoPresupuestoHtml += renderIncomeMetaVsRealCard(totals, totalsUSD);
   ingresoPresupuestoHtml += '<div class="section-label" style="margin-top:22px">Ingreso Mensual Familiar</div>';
-  ingresoPresupuestoHtml += renderIncomeGoalSection(totals);
+  ingresoPresupuestoHtml += renderIncomeGoalSection(totals, totalsUSD);
   ingresoPresupuestoHtml += '<div class="section-label" style="margin-top:22px">Presupuesto del Mes vs. Ingreso Familiar (Meta)</div>';
   ingresoPresupuestoHtml += renderBudgetVsIncomeCard();
   ingresoPresupuestoHtml += '<div class="section-label" style="margin-top:22px">Presupuesto del Mes vs. Ingreso Total (Disponible + Ingresos)</div>';
@@ -2426,16 +2426,17 @@ function renderMetasMensual(totals){
   return html;
 }
 
-function renderIncomeMetaVsRealCard(totals){
+function renderIncomeMetaVsRealCard(totals, totalsUSD){
   var goal = state.familyIncomeGoal;
   if (goal.usd === 0 && goal.ves === 0){
     return '<div class="empty-note" style="padding-top:0">Definí tu Ingreso Mensual Familiar más abajo para comparar acá cuánto planeaste ganar vs. cuánto entró realmente.</div>';
   }
   var html = '<div class="goal-card">';
   if (goal.usd > 0){
-    var diffU = totals.incomeUSD - goal.usd;
+    var realUSD = totalsUSD.incomeUSD;
+    var diffU = realUSD - goal.usd;
     html += '  <div class="goal-row"><span>Meta (USD)</span><span style="font-family:var(--font-mono)">' + fmt(goal.usd,'USD') + '</span></div>';
-    html += '  <div class="goal-row"><span>Real (USD)</span><span style="font-family:var(--font-mono)">' + fmt(totals.incomeUSD,'USD') + '</span></div>';
+    html += '  <div class="goal-row"><span>Real (USD)</span><span style="font-family:var(--font-mono)">' + fmt(realUSD,'USD') + '</span></div>';
     html += '  <div class="goal-row"><span>Diferencia</span><span style="font-family:var(--font-mono);color:' + (diffU>=0?'var(--teal)':'var(--coral)') + '">' + (diffU>=0?'+ ':'− ') + fmt(diffU,'USD') + '</span></div>';
   }
   if (goal.ves > 0){
@@ -2449,11 +2450,11 @@ function renderIncomeMetaVsRealCard(totals){
   return html;
 }
 
-function renderIncomeGoalSection(totals){
+function renderIncomeGoalSection(totals, totalsUSD){
   var goal = state.familyIncomeGoal;
   var html = '';
   if (goal.usd > 0 || goal.ves > 0){
-    if (goal.usd > 0) html += renderGoalCard('Cumplimiento de Ingreso (USD)', totals.incomeUSD, goal.usd, 'USD');
+    if (goal.usd > 0) html += renderGoalCard('Cumplimiento de Ingreso (USD)', totalsUSD.incomeUSD, goal.usd, 'USD');
     if (goal.ves > 0) html += renderGoalCard('Cumplimiento de Ingreso (Bs.)', totals.incomeVES, goal.ves, 'VES');
   } else {
     html += '<div class="empty-note" style="padding-top:0">Definí abajo cuánto esperás que ingrese la familia este mes. A medida que cargues movimientos de ingreso, vas a ver acá el % que ya llevás cumplido.</div>';
