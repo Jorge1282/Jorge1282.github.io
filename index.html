@@ -2402,7 +2402,7 @@ function renderMetasMensual(totals){
   ingresoPresupuestoHtml += renderIncomeMetaVsRealCard(totals, totalsUSD);
   ingresoPresupuestoHtml += '<div class="section-label" style="margin-top:22px">Ingreso Mensual Familiar</div>';
   ingresoPresupuestoHtml += renderIncomeGoalSection(totals, totalsUSD);
-  ingresoPresupuestoHtml += '<div class="section-label" style="margin-top:22px">Presupuesto del Mes vs. Ingreso Familiar (Meta)</div>';
+  ingresoPresupuestoHtml += '<div class="section-label" style="margin-top:22px">Presupuesto del Mes vs. Ingreso Familiar (Real)</div>';
   ingresoPresupuestoHtml += renderBudgetVsIncomeCard();
   ingresoPresupuestoHtml += '<div class="section-label" style="margin-top:22px">Presupuesto del Mes vs. Ingreso Total (Disponible + Ingresos)</div>';
   ingresoPresupuestoHtml += renderBudgetVsRealIncomeCard(totals, totalIncomeCombinedUSD, incomeCombinedUSD, openingAvailableCombined);
@@ -2542,7 +2542,8 @@ function renderBudgetVsExpensesCard(expenseCombinedUSD){
 }
 
 function renderBudgetVsIncomeCard(){
-  var goal = state.familyIncomeGoal;
+  var monthTx = getMonthTx();
+  var realIncomeUSD = getMonthTotalsUSD(monthTx).incomeUSD;
   var sumUsd = 0, sumVes = 0;
   Object.keys(state.budgets).forEach(function(id){
     var b = state.budgets[id];
@@ -2553,33 +2554,29 @@ function renderBudgetVsIncomeCard(){
   if (sumUsd === 0 && sumVes === 0){
     return '<div class="empty-note" style="padding-top:0">Todavía no definiste presupuestos por categoría (Ajustes → Presupuesto por Categoría). Cuando lo hagas, vas a ver acá qué porcentaje de tu ingreso familiar representa el total presupuestado.</div>';
   }
-  if (goal.usd === 0 && goal.ves === 0){
+  var sumTotalUSD = sumUsd;
+  if (sumVes > 0){
+    var todayRate = getRateForDate(todayStr());
+    if (todayRate) sumTotalUSD += sumVes / todayRate;
+  }
+  if (realIncomeUSD === 0){
     var htmlEmpty = '<div class="goal-card">';
     htmlEmpty += '  <div class="goal-row"><span>Total Presupuestado</span></div>';
     htmlEmpty += '  <div class="goal-numbers">' + (sumUsd>0?fmt(sumUsd,'USD'):'') + (sumUsd>0&&sumVes>0?' + ':'') + (sumVes>0?fmt(sumVes,'VES'):'') + '</div>';
-    htmlEmpty += '  <div class="goal-ring-of" style="margin-top:6px">Definí tu Ingreso Mensual Familiar arriba para ver qué porcentaje representa.</div>';
+    htmlEmpty += '  <div class="goal-ring-of" style="margin-top:6px">Todavía no registraste ingresos este mes para ver qué porcentaje representa.</div>';
     htmlEmpty += '</div>';
     return htmlEmpty;
   }
-  var html = '';
-  if (goal.usd > 0){
-    var pctU = Math.round((sumUsd / goal.usd) * 100);
-    var colorU = pctU > 100 ? 'var(--coral)' : 'var(--teal)';
-    html += '<div class="goal-card">';
-    html += '  <div class="goal-row"><span>Presupuesto vs Ingreso (USD)</span><span class="goal-pct" style="color:' + colorU + '">' + pctU + '%</span></div>';
-    html += '  <div class="bar-track"><div class="bar-fill-gold" style="width:' + Math.min(100,pctU) + '%;background:' + colorU + '"></div></div>';
-    html += '  <div class="goal-numbers">' + fmt(sumUsd,'USD') + ' presupuestado de ' + fmt(goal.usd,'USD') + ' de ingreso esperado' + (pctU>100?' · Excede tu ingreso planeado':'') + '</div>';
-    html += '</div>';
+  var pctU = Math.round((sumTotalUSD / realIncomeUSD) * 100);
+  var colorU = pctU > 100 ? 'var(--coral)' : 'var(--teal)';
+  var html = '<div class="goal-card">';
+  html += '  <div class="goal-row"><span>Presupuesto vs Ingreso (USD)</span><span class="goal-pct" style="color:' + colorU + '">' + pctU + '%</span></div>';
+  html += '  <div class="bar-track"><div class="bar-fill-gold" style="width:' + Math.min(100,pctU) + '%;background:' + colorU + '"></div></div>';
+  html += '  <div class="goal-numbers">' + fmt(sumTotalUSD,'USD') + ' presupuestado de ' + fmt(realIncomeUSD,'USD') + ' de ingreso real' + (pctU>100?' · Excede tu ingreso real':'') + '</div>';
+  if (sumVes > 0){
+    html += '  <div class="budget-note" style="margin-top:6px">El presupuesto en Bs. se convierte a $ con la tasa de hoy.</div>';
   }
-  if (goal.ves > 0){
-    var pctV = Math.round((sumVes / goal.ves) * 100);
-    var colorV = pctV > 100 ? 'var(--coral)' : 'var(--teal)';
-    html += '<div class="goal-card" style="margin-top:8px">';
-    html += '  <div class="goal-row"><span>Presupuesto vs Ingreso (Bs.)</span><span class="goal-pct" style="color:' + colorV + '">' + pctV + '%</span></div>';
-    html += '  <div class="bar-track"><div class="bar-fill-gold" style="width:' + Math.min(100,pctV) + '%;background:' + colorV + '"></div></div>';
-    html += '  <div class="goal-numbers">' + fmt(sumVes,'VES') + ' presupuestado de ' + fmt(goal.ves,'VES') + ' de ingreso esperado' + (pctV>100?' · Excede tu ingreso planeado':'') + '</div>';
-    html += '</div>';
-  }
+  html += '</div>';
   return html;
 }
 
