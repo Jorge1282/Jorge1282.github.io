@@ -2709,9 +2709,10 @@ function renderPagos(){
   html += renderNotificationBanner();
 
   var grandUSD = 0, grandVES = 0;
-  var byMonth = {}; // key -> {usd, ves}
+  var byMonth = {}; // key -> {usd, ves, pendingUSD, pendingVES, paidUSD, paidVES, q1:{...}, q2:{...}}
   var byPerson = {}; // id -> {usd, ves}
-  var byMonthPerson = {}; // monthKey -> personId -> {usd, ves}
+  function emptyQuincena(){ return { usd: 0, ves: 0, pendingUSD: 0, pendingVES: 0, paidUSD: 0, paidVES: 0, persons: {} }; }
+  function fmtPair(usd, ves){ return (usd>0?fmt(usd,'USD'):'') + (usd>0&&ves>0?' + ':'') + (ves>0?fmt(ves,'VES'):''); }
   getPaymentCategories().forEach(function(catId){
     (state.paymentCommitments[catId] || []).forEach(function(p){
       var amt = Number(p.amount) || 0;
@@ -2719,14 +2720,20 @@ function renderPagos(){
 
       if (p.date){
         var mk = monthKeyFromDate(p.date);
-        if (!byMonth[mk]) byMonth[mk] = { usd: 0, ves: 0 };
-        if (p.currency === 'USD') byMonth[mk].usd += amt; else byMonth[mk].ves += amt;
-
-        if (p.person){
-          if (!byMonthPerson[mk]) byMonthPerson[mk] = {};
-          if (!byMonthPerson[mk][p.person]) byMonthPerson[mk][p.person] = { usd: 0, ves: 0 };
-          if (p.currency === 'USD') byMonthPerson[mk][p.person].usd += amt; else byMonthPerson[mk][p.person].ves += amt;
+        var day = Number(p.date.slice(8,10));
+        var qKey = day <= 15 ? 'q1' : 'q2';
+        var personKey = p.person || 'unassigned';
+        if (!byMonth[mk]) byMonth[mk] = { usd: 0, ves: 0, pendingUSD: 0, pendingVES: 0, paidUSD: 0, paidVES: 0, q1: emptyQuincena(), q2: emptyQuincena() };
+        var mObj = byMonth[mk];
+        var qObj = mObj[qKey];
+        if (p.currency === 'USD'){ mObj.usd += amt; qObj.usd += amt; } else { mObj.ves += amt; qObj.ves += amt; }
+        if (p.paid){
+          if (p.currency === 'USD'){ mObj.paidUSD += amt; qObj.paidUSD += amt; } else { mObj.paidVES += amt; qObj.paidVES += amt; }
+        } else {
+          if (p.currency === 'USD'){ mObj.pendingUSD += amt; qObj.pendingUSD += amt; } else { mObj.pendingVES += amt; qObj.pendingVES += amt; }
         }
+        if (!qObj.persons[personKey]) qObj.persons[personKey] = { usd: 0, ves: 0 };
+        if (p.currency === 'USD') qObj.persons[personKey].usd += amt; else qObj.persons[personKey].ves += amt;
       }
       if (p.person){
         if (!byPerson[p.person]) byPerson[p.person] = { usd: 0, ves: 0 };
@@ -2741,16 +2748,40 @@ function renderPagos(){
       html += '<div class="section-label" style="margin-top:0">Por mes</div>';
       monthKeys.forEach(function(mk){
         var m = byMonth[mk];
+        var parts = mk.split('-');
+        var lastDay = new Date(Number(parts[0]), Number(parts[1]), 0).getDate();
         html += '<div class="goal-card" style="margin-bottom:8px">';
         html += '  <div class="goal-row"><span>Total de Pago ' + esc(monthLabelFromKey(mk)) + '</span></div>';
-        html += '  <div class="goal-numbers" style="font-size:13px;font-weight:700;color:var(--gold)">' + (m.usd>0?fmt(m.usd,'USD'):'') + (m.usd>0&&m.ves>0?' + ':'') + (m.ves>0?fmt(m.ves,'VES'):'') + '</div>';
-        var mp = byMonthPerson[mk];
-        if (mp){
+        html += '  <div class="goal-numbers" style="font-size:13px;font-weight:700;color:var(--gold)">' + fmtPair(m.usd, m.ves) + '</div>';
+
+        [['q1','1 al 15'],['q2','16 al ' + lastDay]].forEach(function(qDef){
+          var qObj = m[qDef[0]];
+          if (qObj.usd<=0 && qObj.ves<=0) return;
+          html += '  <div class="budget-note" style="margin-top:8px;font-weight:700">' + qDef[1] + '</div>';
           PAYMENT_PERSONS.forEach(function(per){
-            var pm = mp[per.id];
+            var pm = qObj.persons[per.id];
             if (!pm || (pm.usd<=0 && pm.ves<=0)) return;
-            html += '  <div class="budget-note" style="margin-top:4px"><span style="color:' + per.color + ';font-weight:600">' + esc(per.label) + '</span>: ' + (pm.usd>0?fmt(pm.usd,'USD'):'') + (pm.usd>0&&pm.ves>0?' + ':'') + (pm.ves>0?fmt(pm.ves,'VES'):'') + '</div>';
+            html += '  <div class="budget-note" style="margin-top:4px"><span style="color:' + per.color + ';font-weight:600">' + esc(per.label) + '</span>: ' + fmtPair(pm.usd, pm.ves) + '</div>';
           });
+          var unassigned = qObj.persons.unassigned;
+          if (unassigned && (unassigned.usd>0 || unassigned.ves>0)){
+            html += '  <div class="budget-note" style="margin-top:4px"><span style="color:var(--text-faint);font-weight:600">Sin asignar</span>: ' + fmtPair(unassigned.usd, unassigned.ves) + '</div>';
+          }
+          if (qObj.pendingUSD>0 || qObj.pendingVES>0){
+            html += '  <div class="budget-note" style="margin-top:4px;color:var(--coral)">Pendiente: ' + fmtPair(qObj.pendingUSD, qObj.pendingVES) + '</div>';
+          }
+          if (qObj.paidUSD>0 || qObj.paidVES>0){
+            html += '  <div class="budget-note" style="margin-top:4px;color:var(--teal)">✓ Pagado: ' + fmtPair(qObj.paidUSD, qObj.paidVES) + '</div>';
+          }
+        });
+
+        if ((m.pendingUSD>0 || m.pendingVES>0) || (m.paidUSD>0 || m.paidVES>0)){
+          html += '  <div class="goal-row" style="margin-top:8px;border-top:1px dashed var(--line);padding-top:8px">';
+          html += '    <span style="color:var(--coral);font-weight:700">Total Pendiente: ' + fmtPair(m.pendingUSD, m.pendingVES) + '</span>';
+          html += '  </div>';
+          html += '  <div class="goal-row">';
+          html += '    <span style="color:var(--teal);font-weight:700">Total Pagado: ' + fmtPair(m.paidUSD, m.paidVES) + '</span>';
+          html += '  </div>';
         }
         html += '</div>';
       });
