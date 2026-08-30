@@ -262,7 +262,7 @@ function getPaymentCategories(){
      tener compromisos de pago — se agregan/editan desde Ajustes → Categorías. */
   return EXPENSE_CATEGORIES.map(function(c){ return c.id; });
 }
-var PAYMENT_PERSONS = [{id:'jorge',label:'Jorge',color:'var(--teal)'},{id:'sheila',label:'Sheila',color:'var(--coral)'}];
+var PAYMENT_PERSONS = [{id:'jorge',label:'Jorge',color:'#4A90E2'},{id:'sheila',label:'Sheila',color:'#9B59B6'}];
 function personLabel(id){
   var p = PAYMENT_PERSONS.find(function(x){ return x.id === id; });
   return p ? p.label : '';
@@ -2746,42 +2746,50 @@ function renderPagos(){
     var monthKeys = Object.keys(byMonth).sort();
     if (monthKeys.length){
       html += '<div class="section-label" style="margin-top:0">Por mes</div>';
-      monthKeys.forEach(function(mk){
+      monthKeys.forEach(function(mk, mi){
         var m = byMonth[mk];
         var parts = mk.split('-');
         var lastDay = new Date(Number(parts[0]), Number(parts[1]), 0).getDate();
+        var monthKey = 'pagomes-' + mk;
+        var monthExpandIndex = mi === 0 ? 0 : -1;
+        var monthExpanded = isGroupExpanded(monthKey, monthExpandIndex);
+
         html += '<div class="goal-card" style="margin-bottom:8px">';
-        html += '  <div class="goal-row"><span>Total de Pago ' + esc(monthLabelFromKey(mk)) + '</span></div>';
-        html += '  <div class="goal-numbers" style="font-size:13px;font-weight:700;color:var(--gold)">' + fmtPair(m.usd, m.ves) + '</div>';
+        html += '  <button class="group-header group-header-btn" style="padding:2px 2px 2px" onclick="toggleGroup(\'' + monthKey + '\',' + monthExpandIndex + ')">';
+        html += '    <span class="group-title-wrap"><span class="group-chevron ' + (monthExpanded?'open':'') + '">' + ICONS.chevronDown + '</span><span class="group-title" style="text-transform:none">Total de Pago ' + esc(monthLabelFromKey(mk)) + '</span></span>';
+        html += '    <span class="group-net-badge">' + fmtPair(m.usd, m.ves) + '</span>';
+        html += '  </button>';
 
-        [['q1','1 al 15'],['q2','16 al ' + lastDay]].forEach(function(qDef){
-          var qObj = m[qDef[0]];
-          if (qObj.usd<=0 && qObj.ves<=0) return;
-          html += '  <div class="budget-note" style="margin-top:8px;font-weight:700">' + qDef[1] + '</div>';
-          PAYMENT_PERSONS.forEach(function(per){
-            var pm = qObj.persons[per.id];
-            if (!pm || (pm.usd<=0 && pm.ves<=0)) return;
-            html += '  <div class="budget-note" style="margin-top:4px"><span style="color:' + per.color + ';font-weight:600">' + esc(per.label) + '</span>: ' + fmtPair(pm.usd, pm.ves) + '</div>';
+        if (monthExpanded){
+          [['q1','1 al 15'],['q2','16 al ' + lastDay]].forEach(function(qDef){
+            var qObj = m[qDef[0]];
+            if (qObj.usd<=0 && qObj.ves<=0) return;
+            html += '  <div class="budget-note" style="margin-top:8px;font-weight:700">' + qDef[1] + '</div>';
+            PAYMENT_PERSONS.forEach(function(per){
+              var pm = qObj.persons[per.id];
+              if (!pm || (pm.usd<=0 && pm.ves<=0)) return;
+              html += '  <div class="budget-note" style="margin-top:6px;font-size:14px"><span style="color:' + per.color + ';font-weight:600">' + esc(per.label) + '</span>: ' + fmtPair(pm.usd, pm.ves) + '</div>';
+            });
+            var unassigned = qObj.persons.unassigned;
+            if (unassigned && (unassigned.usd>0 || unassigned.ves>0)){
+              html += '  <div class="budget-note" style="margin-top:6px;font-size:14px"><span style="color:var(--text-faint);font-weight:600">Sin asignar</span>: ' + fmtPair(unassigned.usd, unassigned.ves) + '</div>';
+            }
+            if (qObj.pendingUSD>0 || qObj.pendingVES>0){
+              html += '  <div class="budget-note" style="margin-top:6px;font-size:14px;font-weight:600;color:var(--coral)">Pendiente: ' + fmtPair(qObj.pendingUSD, qObj.pendingVES) + '</div>';
+            }
+            if (qObj.paidUSD>0 || qObj.paidVES>0){
+              html += '  <div class="budget-note" style="margin-top:6px;font-size:14px;font-weight:600;color:var(--teal)">✓ Pagado: ' + fmtPair(qObj.paidUSD, qObj.paidVES) + '</div>';
+            }
           });
-          var unassigned = qObj.persons.unassigned;
-          if (unassigned && (unassigned.usd>0 || unassigned.ves>0)){
-            html += '  <div class="budget-note" style="margin-top:4px"><span style="color:var(--text-faint);font-weight:600">Sin asignar</span>: ' + fmtPair(unassigned.usd, unassigned.ves) + '</div>';
-          }
-          if (qObj.pendingUSD>0 || qObj.pendingVES>0){
-            html += '  <div class="budget-note" style="margin-top:4px;color:var(--coral)">Pendiente: ' + fmtPair(qObj.pendingUSD, qObj.pendingVES) + '</div>';
-          }
-          if (qObj.paidUSD>0 || qObj.paidVES>0){
-            html += '  <div class="budget-note" style="margin-top:4px;color:var(--teal)">✓ Pagado: ' + fmtPair(qObj.paidUSD, qObj.paidVES) + '</div>';
-          }
-        });
 
-        if ((m.pendingUSD>0 || m.pendingVES>0) || (m.paidUSD>0 || m.paidVES>0)){
-          html += '  <div class="goal-row" style="margin-top:8px;border-top:1px dashed var(--line);padding-top:8px">';
-          html += '    <span style="color:var(--coral);font-weight:700">Total Pendiente: ' + fmtPair(m.pendingUSD, m.pendingVES) + '</span>';
-          html += '  </div>';
-          html += '  <div class="goal-row">';
-          html += '    <span style="color:var(--teal);font-weight:700">Total Pagado: ' + fmtPair(m.paidUSD, m.paidVES) + '</span>';
-          html += '  </div>';
+          if ((m.pendingUSD>0 || m.pendingVES>0) || (m.paidUSD>0 || m.paidVES>0)){
+            html += '  <div class="goal-row" style="margin-top:8px;border-top:1px dashed var(--line);padding-top:8px">';
+            html += '    <span style="color:var(--coral);font-weight:700">Total Pendiente: ' + fmtPair(m.pendingUSD, m.pendingVES) + '</span>';
+            html += '  </div>';
+            html += '  <div class="goal-row">';
+            html += '    <span style="color:var(--teal);font-weight:700">Total Pagado: ' + fmtPair(m.paidUSD, m.paidVES) + '</span>';
+            html += '  </div>';
+          }
         }
         html += '</div>';
       });
