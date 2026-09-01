@@ -344,7 +344,8 @@ var STORAGE_KEY_RATE = 'ff_bcv_rate_v1';
 var STORAGE_KEY_BALANCE = 'ff_initial_balance_v1';
 var STORAGE_KEY_HISTORY = 'ff_bcv_history_v1';
 var STORAGE_KEY_PIN = 'ff_pin_hash_v1';
-var STORAGE_KEY_BUDGETS = 'ff_budgets_v1';
+var STORAGE_KEY_BUDGETS = 'ff_budgets_v1'; /* formato viejo, global — solo se lee, para migrar */
+var STORAGE_KEY_MONTHLY_BUDGETS = 'ff_monthly_budgets_v1';
 var STORAGE_KEY_PAYMENTS = 'ff_payments_v1';
 var STORAGE_KEY_SAVINGS = 'ff_savings_v1';
 var STORAGE_KEY_SAVINGS_HISTORY = 'ff_savings_history_v1';
@@ -404,7 +405,8 @@ var state = {
   locked: false,
   pinInput: '',
   pinError: false,
-  budgets: {},
+  budgets: {}, /* "vista en vivo" del mes que se está viendo — se resincroniza en cada render() desde monthlyBudgets; no se edita directamente */
+  monthlyBudgets: {}, /* 'YYYY-MM' -> { catId: {usd, ves} } — fuente de verdad real, un presupuesto independiente por mes */
   paymentCommitments: {},
   familyIncomeGoal: { usd: 0, ves: 0 },
   customCategories: { expense: [], income: [] },
@@ -637,15 +639,41 @@ function saveFamilyIncomeGoal(){
   pushToCloud();
 }
 
-/* ---------- presupuestos por categoría ---------- */
+/* ---------- presupuestos por categoría (independientes por mes) ---------- */
+function currentBudgetMonthKey(){
+  return getViewDate().toISOString().slice(0,7);
+}
+/* Único punto que decide "cuál es el presupuesto visible ahora": copia el
+   presupuesto del mes que se está viendo a state.budgets, que es lo que leen
+   renderPresupuesto(), getBudgetRuleAnalysis() y el resto de las tarjetas de
+   presupuesto. Se llama al principio de render(), así que por el resto del
+   código state.budgets siempre refleja el mes correcto sin tener que tocar
+   cada función que lo consulta. */
+function syncBudgetsForViewedMonth(){
+  state.budgets = state.monthlyBudgets[currentBudgetMonthKey()] || {};
+}
+function saveMonthlyBudgetsToStorage(){
+  try { localStorage.setItem(STORAGE_KEY_MONTHLY_BUDGETS, JSON.stringify(state.monthlyBudgets)); } catch(e){}
+}
 function loadBudgets(){
   try {
-    var raw = localStorage.getItem(STORAGE_KEY_BUDGETS);
-    if (raw) state.budgets = JSON.parse(raw);
-  } catch(e){ console.error('budgets load error', e); }
-}
-function saveBudgetsToStorage(){
-  try { localStorage.setItem(STORAGE_KEY_BUDGETS, JSON.stringify(state.budgets)); } catch(e){}
+    var raw = localStorage.getItem(STORAGE_KEY_MONTHLY_BUDGETS);
+    if (raw) state.monthlyBudgets = JSON.parse(raw) || {};
+  } catch(e){ console.error('monthly budgets load error', e); }
+  if (!Object.keys(state.monthlyBudgets).length){
+    try {
+      var legacyRaw = localStorage.getItem(STORAGE_KEY_BUDGETS);
+      if (legacyRaw){
+        var legacy = JSON.parse(legacyRaw);
+        if (legacy && Object.keys(legacy).length){
+          /* Presupuesto viejo (global, un solo mes): se asigna al mes actual. */
+          state.monthlyBudgets[currentBudgetMonthKey()] = legacy;
+          saveMonthlyBudgetsToStorage();
+        }
+      }
+    } catch(e){ console.error('budgets migration error', e); }
+  }
+  syncBudgetsForViewedMonth();
 }
 function saveBudgets(){
   var budgets = {};
@@ -656,8 +684,9 @@ function saveBudgets(){
     var usd = usdEl ? (Number(usdEl.value) || 0) : 0;
     if (ves > 0 || usd > 0) budgets[c.id] = { usd: usd, ves: ves };
   });
+  state.monthlyBudgets[currentBudgetMonthKey()] = budgets;
   state.budgets = budgets;
-  saveBudgetsToStorage();
+  saveMonthlyBudgetsToStorage();
   pushToCloud();
   render();
   window.alert('Presupuestos guardados.');
@@ -1102,7 +1131,17 @@ function initFirebaseSync(){
         }
         state.monthlyOpeningOverrides = data.monthlyOpeningOverrides || {};
         saveMonthlyOpeningsToStorage();
-        state.budgets = data.budgets || {};
+        if (data.monthlyBudgets){
+          state.monthlyBudgets = data.monthlyBudgets;
+        } else if (data.budgets && Object.keys(data.budgets).length){
+          /* Firestore todavía tiene el formato viejo (un presupuesto único y
+             global): se migra al mes que se está viendo en este dispositivo. */
+          state.monthlyBudgets = {};
+          state.monthlyBudgets[currentBudgetMonthKey()] = data.budgets;
+        } else {
+          state.monthlyBudgets = state.monthlyBudgets || {};
+        }
+        syncBudgetsForViewedMonth();
         state.paymentCommitments = data.paymentCommitments || {};
         state.familyIncomeGoal = data.familyIncomeGoal || { usd: 0, ves: 0 };
         saveFamilyIncomeGoalToStorage();
@@ -1122,7 +1161,7 @@ function initFirebaseSync(){
         state.localWritePending = state.localWritePending && state.localUpdatedAt > remoteUpdatedAt;
         saveData(state.localUpdatedAt);
         saveInitialBalanceToStorage();
-        try { localStorage.setItem(STORAGE_KEY_BUDGETS, JSON.stringify(state.budgets)); } catch(e){}
+        saveMonthlyBudgetsToStorage();
         try { localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(state.paymentCommitments)); } catch(e){}
         render();
       } else {
@@ -1155,6 +1194,10 @@ function pushToCloud(){
     initialBalanceUpdatedAt: state.initialBalanceUpdatedAt || null,
     initialBalanceLocked: state.initialBalanceLocked || false,
     monthlyOpeningOverrides: state.monthlyOpeningOverrides,
+    monthlyBudgets: state.monthlyBudgets,
+    /* Espejo del formato viejo (solo el mes que se ve en este dispositivo) por
+       compatibilidad, para que una instancia vieja cacheada por el Service
+       Worker no se quede sin nada mientras se actualiza. */
     budgets: state.budgets,
     paymentCommitments: state.paymentCommitments,
     currentSavings: state.currentSavings,
@@ -2042,6 +2085,7 @@ function render(){
     if (pinEl) pinEl.focus();
     return;
   }
+  syncBudgetsForViewedMonth();
   var monthTx = getMonthTx();
   var totals = getTotals(monthTx);
   var breakdown = getCategoryBreakdown(monthTx);
