@@ -459,14 +459,21 @@ function saveCachedRate(){
   try { localStorage.setItem(STORAGE_KEY_RATE, JSON.stringify(state.bcvRate)); }
   catch(e){ console.error('rate cache save error', e); }
 }
+function sanitizeInitialBalance(balance){
+  var src = balance || {};
+  return {
+    usd: Number(src.usd) || 0,
+    ves: Number(src.ves) || 0
+  };
+}
 function loadInitialBalance(){
   try {
     var raw = localStorage.getItem(STORAGE_KEY_BALANCE);
-    if (raw) state.initialBalance = JSON.parse(raw);
+    if (raw) state.initialBalance = sanitizeInitialBalance(JSON.parse(raw));
   } catch(e){ console.error('balance load error', e); }
 }
 function saveInitialBalance(usd, ves){
-  state.initialBalance = { usd: Number(usd)||0, ves: Number(ves)||0 };
+  state.initialBalance = sanitizeInitialBalance({ usd: usd, ves: ves });
   try { localStorage.setItem(STORAGE_KEY_BALANCE, JSON.stringify(state.initialBalance)); }
   catch(e){ console.error('balance save error', e); }
   render();
