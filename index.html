@@ -395,6 +395,8 @@ var state = {
   bcvHistory: {}, /* { 'YYYY-MM-DD': usdRate } */
   historyStatus: 'idle',
   initialBalance: { usd: 0, ves: 0 },
+  initialBalanceUpdatedAt: 0, /* marca de tiempo (ms) de la última edición deliberada del saldo inicial — protege ese campo de sobrescrituras de dispositivos con datos viejos */
+  initialBalanceLocked: false, /* si está en true, este dispositivo ignora el initialBalance que llegue de Firestore */
   syncStatus: 'local', /* local | connecting | synced | error */
   pinHash: null,
   locked: false,
@@ -469,15 +471,62 @@ function sanitizeInitialBalance(balance){
 function loadInitialBalance(){
   try {
     var raw = localStorage.getItem(STORAGE_KEY_BALANCE);
-    if (raw) state.initialBalance = sanitizeInitialBalance(JSON.parse(raw));
+    if (raw){
+      var parsed = JSON.parse(raw);
+      state.initialBalance = sanitizeInitialBalance(parsed);
+      state.initialBalanceUpdatedAt = Number(parsed.updatedAt) || 0;
+      state.initialBalanceLocked = !!parsed.locked;
+    }
   } catch(e){ console.error('balance load error', e); }
+}
+function saveInitialBalanceToStorage(){
+  try {
+    localStorage.setItem(STORAGE_KEY_BALANCE, JSON.stringify({
+      usd: state.initialBalance.usd,
+      ves: state.initialBalance.ves,
+      updatedAt: state.initialBalanceUpdatedAt,
+      locked: state.initialBalanceLocked
+    }));
+  } catch(e){ console.error('balance save error', e); }
 }
 function saveInitialBalance(usd, ves){
   state.initialBalance = sanitizeInitialBalance({ usd: usd, ves: ves });
-  try { localStorage.setItem(STORAGE_KEY_BALANCE, JSON.stringify(state.initialBalance)); }
-  catch(e){ console.error('balance save error', e); }
+  state.initialBalanceUpdatedAt = Date.now();
+  saveInitialBalanceToStorage();
   render();
-  pushToCloud();
+  pushInitialBalanceToCloud();
+}
+function toggleInitialBalanceLock(){
+  state.initialBalanceLocked = !state.initialBalanceLocked;
+  saveInitialBalanceToStorage();
+  render();
+  pushInitialBalanceToCloud();
+}
+/* Escritura dedicada y con merge:true para el saldo inicial: solo toca estos
+   campos (no todo el documento) y usa serverTimestamp() propio, para que una
+   corrección manual tenga prioridad frente a un pushToCloud() de otro
+   dispositivo con datos viejos (ver initFirebaseSync). */
+function pushInitialBalanceToCloud(){
+  state.localUpdatedAt = Math.max(state.localUpdatedAt, Date.now());
+  saveData(state.localUpdatedAt);
+  if (!fbReady || !familyDocRef) return;
+  state.localWritePending = true;
+  var payload = {
+    initialBalance: state.initialBalance,
+    initialBalanceUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    initialBalanceLocked: state.initialBalanceLocked,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  familyDocRef.set(payload, { merge: true }).then(function(){
+    state.localWritePending = false;
+    state.syncStatus = 'synced';
+    render();
+  }).catch(function(e){
+    state.localWritePending = false;
+    console.error('push initial balance error', e);
+    state.syncStatus = 'error';
+    render();
+  });
 }
 
 /* ---------- seguridad (PIN) ---------- */
@@ -1004,7 +1053,21 @@ function initFirebaseSync(){
         if (remoteUpdatedAt && remoteUpdatedAt < state.localUpdatedAt) return;
         state.transactions = data.transactions || [];
         state.goal = normalizeGoal(data.goal);
-        state.initialBalance = data.initialBalance || { usd: 0, ves: 0 };
+        /* El saldo inicial se resuelve con SU PROPIA marca de tiempo, no con la
+           del documento entero: así, si otro dispositivo sube datos viejos por
+           una acción no relacionada (ej. agregar un movimiento), no revierte
+           una corrección manual más reciente hecha acá. Si está bloqueado
+           manualmente, se ignora directamente lo que venga de Firestore. */
+        var remoteInitialBalanceUpdatedAt = timestampMillis(data.initialBalanceUpdatedAt);
+        if (state.initialBalanceLocked){
+          // conservar el valor local: el usuario lo bloqueó explícitamente
+        } else if (remoteInitialBalanceUpdatedAt && remoteInitialBalanceUpdatedAt < state.initialBalanceUpdatedAt){
+          // el dato remoto es más viejo que nuestra última edición: se conserva el local
+        } else {
+          state.initialBalance = data.initialBalance || { usd: 0, ves: 0 };
+          state.initialBalanceUpdatedAt = remoteInitialBalanceUpdatedAt || state.initialBalanceUpdatedAt;
+          if (typeof data.initialBalanceLocked === 'boolean') state.initialBalanceLocked = data.initialBalanceLocked;
+        }
         state.budgets = data.budgets || {};
         state.paymentCommitments = data.paymentCommitments || {};
         state.familyIncomeGoal = data.familyIncomeGoal || { usd: 0, ves: 0 };
@@ -1024,7 +1087,7 @@ function initFirebaseSync(){
         state.localUpdatedAt = Math.max(state.localUpdatedAt, remoteUpdatedAt);
         state.localWritePending = state.localWritePending && state.localUpdatedAt > remoteUpdatedAt;
         saveData(state.localUpdatedAt);
-        try { localStorage.setItem(STORAGE_KEY_BALANCE, JSON.stringify(state.initialBalance)); } catch(e){}
+        saveInitialBalanceToStorage();
         try { localStorage.setItem(STORAGE_KEY_BUDGETS, JSON.stringify(state.budgets)); } catch(e){}
         try { localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(state.paymentCommitments)); } catch(e){}
         render();
@@ -1052,6 +1115,11 @@ function pushToCloud(){
     transactions: state.transactions,
     goal: state.goal,
     initialBalance: state.initialBalance,
+    /* Se sube el timestamp tal cual lo tenemos en caché (NO serverTimestamp()):
+       si este dispositivo tiene datos viejos del saldo inicial, debe declarar
+       honestamente que son viejos, para que otros no los adopten por error. */
+    initialBalanceUpdatedAt: state.initialBalanceUpdatedAt || null,
+    initialBalanceLocked: state.initialBalanceLocked || false,
     budgets: state.budgets,
     paymentCommitments: state.paymentCommitments,
     currentSavings: state.currentSavings,
@@ -2993,6 +3061,10 @@ function renderMetasAjustes(){
   html += '<div class="form-group"><label class="form-label">Saldo Inicial en USD</label><input class="input" type="number" inputmode="decimal" id="balUsdInput" value="' + state.initialBalance.usd + '"></div>';
   html += '<div class="form-group"><label class="form-label">Saldo Inicial en Bs.</label><input class="input" type="number" inputmode="decimal" id="balVesInput" value="' + state.initialBalance.ves + '"></div>';
   html += '<button class="primary-btn" onclick="saveInitialBalance(document.getElementById(\'balUsdInput\').value, document.getElementById(\'balVesInput\').value)">Guardar saldo inicial</button>';
+  html += '<label class="budget-note" style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer">';
+  html += '  <input type="checkbox" id="balLockInput" ' + (state.initialBalanceLocked ? 'checked' : '') + ' onchange="toggleInitialBalanceLock()">';
+  html += '  <span>🔒 Bloquear este saldo' + (state.initialBalanceLocked ? ' (bloqueado: este dispositivo ignora lo que llegue de otros)' : ' — evita que otro dispositivo con datos viejos lo sobrescriba') + '</span>';
+  html += '</label>';
   return html;
 }
 
