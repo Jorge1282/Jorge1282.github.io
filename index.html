@@ -1859,7 +1859,10 @@ function getMonthOpeningBalance(){
 /* ---------- actions ---------- */
 function setView(v){ state.view = v; render(); }
 function changeMonth(delta){
-  if (delta > 0 && state.monthOffset >= 0) return;
+  /* Sin límite hacia adelante ni hacia atrás: se puede planificar pagos en
+     meses futuros (aún sin movimientos) igual que se puede revisar el
+     historial pasado — toda la app ya filtra por fecha, no por "si el mes
+     tiene datos", así que navegar a un mes vacío es seguro y funcional. */
   state.monthOffset += delta;
   render();
 }
@@ -2105,7 +2108,7 @@ function render(){
   html += '<div class="month-nav">';
   html += '  <button class="icon-btn" onclick="changeMonth(-1)">' + ICONS.chevronLeft + '</button>';
   html += '  <div class="month-label">' + esc(monthLabel) + '</div>';
-  html += '  <button class="icon-btn" ' + (state.monthOffset>=0?'disabled':'') + ' onclick="changeMonth(1)">' + ICONS.chevronRight + '</button>';
+  html += '  <button class="icon-btn" onclick="changeMonth(1)">' + ICONS.chevronRight + '</button>';
   html += '</div>';
 
   if (state.view === 'resumen') html += renderRateBar();
