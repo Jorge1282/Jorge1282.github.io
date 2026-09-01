@@ -1690,15 +1690,49 @@ function round2(n){
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
-function getCurrentBalance(){
-  var usd = round2(state.initialBalance.usd), ves = round2(state.initialBalance.ves);
+/* Busca el override de apertura más reciente cuyo mes sea <= beforeMonthKey
+   (o el más reciente de todos si beforeMonthKey es null/undefined). Este es el
+   único punto donde se decide "desde dónde" arranca el saldo corrido, para que
+   getCurrentBalance() y getMonthOpeningBalance() usen SIEMPRE la misma regla y
+   un override en un mes se siga sintiendo (continuidad) en los meses y en el
+   saldo actual posteriores, en vez de quedar aislado a un solo mes. */
+function getLatestOpeningAnchor(beforeMonthKey){
+  var keys = Object.keys(state.monthlyOpeningOverrides).filter(function(mk){
+    return !beforeMonthKey || mk <= beforeMonthKey;
+  }).sort();
+  if (!keys.length) return null;
+  var mk = keys[keys.length - 1];
+  var ov = state.monthlyOpeningOverrides[mk];
+  return { monthKey: mk, usd: Number(ov.usd) || 0, ves: Number(ov.ves) || 0 };
+}
+/* Saldo (usd, ves) inmediatamente antes de beforeDateStr ('YYYY-MM-DD'), o el
+   saldo sin límite superior si beforeDateStr es null (para getCurrentBalance).
+   Arranca del override de apertura más reciente aplicable y suma solo las
+   transacciones posteriores a ese punto — así el Saldo Inicial global sigue
+   siendo el punto de partida por defecto, pero un override manual se vuelve el
+   nuevo punto de partida para todo lo que viene después. */
+function getBalanceAsOf(beforeDateStr){
+  var beforeMonthKey = beforeDateStr ? beforeDateStr.slice(0,7) : null;
+  var anchor = getLatestOpeningAnchor(beforeMonthKey);
+  var usd, ves, fromDateStr;
+  if (anchor){
+    usd = anchor.usd; ves = anchor.ves; fromDateStr = anchor.monthKey + '-01';
+  } else {
+    usd = state.initialBalance.usd; ves = state.initialBalance.ves; fromDateStr = null;
+  }
+  usd = round2(usd); ves = round2(ves);
   state.transactions.forEach(function(tx){
+    var afterAnchor = !fromDateStr || tx.date >= fromDateStr;
+    var beforeCutoff = !beforeDateStr || tx.date < beforeDateStr;
+    if (!afterAnchor || !beforeCutoff) return;
     if (tx.currency === 'USD') usd = round2(usd + signedAmount(tx));
     else ves = round2(ves + signedAmount(tx));
   });
   return { usd: usd, ves: ves };
 }
-
+function getCurrentBalance(){
+  return getBalanceAsOf(null);
+}
 function pad2(n){ return n < 10 ? '0'+n : ''+n; }
 
 function getDailyBalances(){
@@ -1718,17 +1752,30 @@ function getDailyBalances(){
     dailyNet[tx.date].count += 1;
   });
 
-  var monthOverride = state.monthlyOpeningOverrides[monthKeyFromDate(monthStart)];
-  var runningUSD, runningVES, runningCombined;
-  if (monthOverride){
-    /* Mes anclado a mano: no se deriva del histórico ni del Saldo Inicial global. */
-    runningUSD = round2(Number(monthOverride.usd) || 0);
-    runningVES = round2(Number(monthOverride.ves) || 0);
-    var overrideRate = getRateForDate(monthStart);
-    runningCombined = round2(runningUSD + (overrideRate ? runningVES / overrideRate : 0));
+  /* runningUSD/VES salen de getMonthOpeningBalance() — la MISMA función que usan
+     Resumen, Metas y Coach — para que Diario nunca muestre un número distinto.
+     runningCombined (equivalente en USD con tasa histórica por transacción) se
+     recalcula acá con más precisión, arrancando del mismo ancla (override más
+     reciente aplicable, o el Saldo Inicial si no hay ninguno). */
+  var opening = getMonthOpeningBalance();
+  var runningUSD = round2(opening.usd), runningVES = round2(opening.ves);
+  var runningCombined;
+  var anchor = getLatestOpeningAnchor(monthKeyFromDate(monthStart));
+  if (anchor){
+    var anchorStart = anchor.monthKey + '-01';
+    var anchorRate = getRateForDate(anchorStart);
+    runningCombined = round2(anchor.usd + (anchorRate ? anchor.ves / anchorRate : 0));
+    var rollTx = state.transactions.filter(function(t){ return t.date >= anchorStart && t.date < monthStart; }).sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+    rollTx.forEach(function(tx){
+      var amt = signedAmount(tx);
+      if (tx.currency === 'USD'){
+        runningCombined = round2(runningCombined + amt);
+      } else {
+        var r = getRateForDate(tx.date);
+        if (r) runningCombined = round2(runningCombined + amt / r);
+      }
+    });
   } else {
-    runningUSD = round2(state.initialBalance.usd);
-    runningVES = round2(state.initialBalance.ves);
     var sortedDates = state.transactions.map(function(t){ return t.date; }).sort();
     var earliestDate = sortedDates.length ? sortedDates[0] : monthStart;
     var openingRate = getRateForDate(earliestDate < monthStart ? earliestDate : monthStart);
@@ -1738,10 +1785,8 @@ function getDailyBalances(){
     priorTx.forEach(function(tx){
       var amt = signedAmount(tx);
       if (tx.currency === 'USD'){
-        runningUSD = round2(runningUSD + amt);
         runningCombined = round2(runningCombined + amt);
       } else {
-        runningVES = round2(runningVES + amt);
         var r = getRateForDate(tx.date);
         if (r) runningCombined = round2(runningCombined + amt / r);
       }
@@ -1765,15 +1810,7 @@ function getDailyBalances(){
 function getMonthOpeningBalance(){
   var vd = getViewDate();
   var monthStart = vd.getFullYear() + '-' + pad2(vd.getMonth() + 1) + '-01';
-  var override = state.monthlyOpeningOverrides[monthKeyFromDate(monthStart)];
-  if (override) return { usd: Number(override.usd) || 0, ves: Number(override.ves) || 0 };
-  var usd = state.initialBalance.usd, ves = state.initialBalance.ves;
-  state.transactions.forEach(function(tx){
-    if (tx.date < monthStart){
-      if (tx.currency === 'USD') usd += signedAmount(tx); else ves += signedAmount(tx);
-    }
-  });
-  return { usd: usd, ves: ves };
+  return getBalanceAsOf(monthStart);
 }
 
 /* ---------- actions ---------- */
