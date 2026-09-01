@@ -2906,6 +2906,19 @@ function renderNotificationBanner(){
 }
 
 function renderPagos(){
+  /* Compromisos de pago quedan acotados al mes que se está viendo (mismo
+     selector "< Agosto 2026 >" que ya usa Resumen, arriba de esta pestaña) —
+     así un pago de agosto nunca infla el total de septiembre. Un compromiso
+     sin fecha asignada se muestra en cualquier mes (no pertenece a ninguno en
+     particular, y ocultarlo haría que el usuario se olvide de ponerle fecha).
+     Nada se borra ni se "archiva": los datos de agosto siguen ahí, solo hay
+     que volver con la flecha "<" para verlos. */
+  var vdPagos = getViewDate();
+  var monthStartPagos = vdPagos.getFullYear() + '-' + pad2(vdPagos.getMonth() + 1) + '-01';
+  var nextMonthDatePagos = new Date(vdPagos.getFullYear(), vdPagos.getMonth() + 1, 1);
+  var nextMonthStartPagos = nextMonthDatePagos.getFullYear() + '-' + pad2(nextMonthDatePagos.getMonth() + 1) + '-01';
+  function inViewedMonth(p){ return !p.date || (p.date >= monthStartPagos && p.date < nextMonthStartPagos); }
+
   var html = '<div class="section-label">Compromisos de pago</div>';
   html += '<div class="empty-note" style="padding-top:0">Agrega las fechas de pago de cada categoría (pueden ser varias, ej. cuotas de Cashea). En Resumen aparecerá un aviso cuando se acerquen o venzan.</div>';
   html += renderNotificationBanner();
@@ -2916,7 +2929,7 @@ function renderPagos(){
   function emptyQuincena(){ return { usd: 0, ves: 0, pendingUSD: 0, pendingVES: 0, paidUSD: 0, paidVES: 0, persons: {} }; }
   function fmtPair(usd, ves){ return (usd>0?fmt(usd,'USD'):'') + (usd>0&&ves>0?' + ':'') + (ves>0?fmt(ves,'VES'):''); }
   getPaymentCategories().forEach(function(catId){
-    (state.paymentCommitments[catId] || []).forEach(function(p){
+    (state.paymentCommitments[catId] || []).filter(inViewedMonth).forEach(function(p){
       var amt = Number(p.amount) || 0;
       if (p.currency === 'USD') grandUSD += amt; else grandVES += amt;
 
@@ -3020,23 +3033,23 @@ function renderPagos(){
   var sortedCategories = getPaymentCategories().slice().sort(function(a, b){
     return catLabel(a).localeCompare(catLabel(b));
   });
-  var withCommitments = sortedCategories.filter(function(id){ return (state.paymentCommitments[id] || []).length > 0; });
-  var withoutCommitments = sortedCategories.filter(function(id){ return (state.paymentCommitments[id] || []).length === 0; });
+  var withCommitments = sortedCategories.filter(function(id){ return (state.paymentCommitments[id] || []).some(inViewedMonth); });
+  var withoutCommitments = sortedCategories.filter(function(id){ return !(state.paymentCommitments[id] || []).some(inViewedMonth); });
 
   withCommitments.forEach(function(catId, ri){
-    html += renderPaymentCategoryBlock(catId, ri === 0 ? 0 : -1);
+    html += renderPaymentCategoryBlock(catId, ri === 0 ? 0 : -1, monthStartPagos, nextMonthStartPagos);
   });
 
   if (withoutCommitments.length > 0){
     var otrasKey = 'pagos-otras-categorias';
     var otrasExpanded = isGroupExpanded(otrasKey, -1);
     html += '<button class="group-header group-header-btn" onclick="toggleGroup(\'' + otrasKey + '\',-1)">';
-    html += '  <span class="group-title-wrap"><span class="group-chevron ' + (otrasExpanded?'open':'') + '">' + ICONS.chevronDown + '</span><span class="group-title">Otras categorías (sin fechas aún)</span></span>';
+    html += '  <span class="group-title-wrap"><span class="group-chevron ' + (otrasExpanded?'open':'') + '">' + ICONS.chevronDown + '</span><span class="group-title">Otras categorías (sin pagos este mes)</span></span>';
     html += '  <span class="group-net-badge">' + withoutCommitments.length + '</span>';
     html += '</button>';
     if (otrasExpanded){
       withoutCommitments.forEach(function(catId, ri){
-        html += renderPaymentCategoryBlock(catId, -1);
+        html += renderPaymentCategoryBlock(catId, -1, monthStartPagos, nextMonthStartPagos);
       });
     }
   }
@@ -3044,12 +3057,14 @@ function renderPagos(){
   return html;
 }
 
-function renderPaymentCategoryBlock(catId, defaultExpandIndex){
+function renderPaymentCategoryBlock(catId, defaultExpandIndex, monthStart, nextMonthStart){
   var html = '';
   var label = catLabel(catId);
   var key = 'pagoscat-' + catId;
   var expanded = isGroupExpanded(key, defaultExpandIndex);
-  var list = (state.paymentCommitments[catId] || []).slice().sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+  var list = (state.paymentCommitments[catId] || [])
+    .filter(function(p){ return !monthStart || !p.date || (p.date >= monthStart && p.date < nextMonthStart); })
+    .slice().sort(function(a,b){ return a.date < b.date ? -1 : 1; });
   var subUSDTotal = 0, hasUnconverted = false;
   list.forEach(function(p){
     var amt = Number(p.amount) || 0;
