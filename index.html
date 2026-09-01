@@ -353,6 +353,7 @@ var STORAGE_KEY_NOTIFIED = 'ff_notified_log_v1';
 var STORAGE_KEY_INCOME_GOAL = 'ff_income_goal_v1';
 var STORAGE_KEY_CATEGORIES = 'ff_custom_categories_v1';
 var STORAGE_KEY_UPDATED_AT = 'ff_updated_at_v1';
+var STORAGE_KEY_MONTH_OPENING = 'ff_month_opening_v1';
 var BCV_ENDPOINTS = [
   'https://bcv.today/api/v1/rate.json',
   'https://cdn.jsdelivr.net/gh/grupoclip/bcv-api/api/v1/rate.json'
@@ -395,6 +396,7 @@ var state = {
   bcvHistory: {}, /* { 'YYYY-MM-DD': usdRate } */
   historyStatus: 'idle',
   initialBalance: { usd: 0, ves: 0 },
+  monthlyOpeningOverrides: {}, /* 'YYYY-MM' -> {usd, ves} — saldo de apertura fijado a mano para ese mes, independiente del resto */
   initialBalanceUpdatedAt: 0, /* marca de tiempo (ms) de la última edición deliberada del saldo inicial — protege ese campo de sobrescrituras de dispositivos con datos viejos */
   initialBalanceLocked: false, /* si está en true, este dispositivo ignora el initialBalance que llegue de Firestore */
   syncStatus: 'local', /* local | connecting | synced | error */
@@ -527,6 +529,36 @@ function pushInitialBalanceToCloud(){
     state.syncStatus = 'error';
     render();
   });
+}
+
+/* ---------- saldo de apertura por mes (override opcional) ---------- */
+function loadMonthlyOpenings(){
+  try {
+    var raw = localStorage.getItem(STORAGE_KEY_MONTH_OPENING);
+    if (raw) state.monthlyOpeningOverrides = JSON.parse(raw) || {};
+  } catch(e){ console.error('month opening load error', e); }
+}
+function saveMonthlyOpeningsToStorage(){
+  try { localStorage.setItem(STORAGE_KEY_MONTH_OPENING, JSON.stringify(state.monthlyOpeningOverrides)); }
+  catch(e){ console.error('month opening save error', e); }
+}
+function saveMonthOpeningOverride(usd, ves){
+  var vd = getViewDate();
+  var monthStart = vd.getFullYear() + '-' + pad2(vd.getMonth() + 1) + '-01';
+  var mk = monthKeyFromDate(monthStart);
+  state.monthlyOpeningOverrides[mk] = { usd: Number(usd) || 0, ves: Number(ves) || 0 };
+  saveMonthlyOpeningsToStorage();
+  render();
+  pushToCloud();
+}
+function clearMonthOpeningOverride(){
+  var vd = getViewDate();
+  var monthStart = vd.getFullYear() + '-' + pad2(vd.getMonth() + 1) + '-01';
+  var mk = monthKeyFromDate(monthStart);
+  delete state.monthlyOpeningOverrides[mk];
+  saveMonthlyOpeningsToStorage();
+  render();
+  pushToCloud();
 }
 
 /* ---------- seguridad (PIN) ---------- */
@@ -1068,6 +1100,8 @@ function initFirebaseSync(){
           state.initialBalanceUpdatedAt = remoteInitialBalanceUpdatedAt || state.initialBalanceUpdatedAt;
           if (typeof data.initialBalanceLocked === 'boolean') state.initialBalanceLocked = data.initialBalanceLocked;
         }
+        state.monthlyOpeningOverrides = data.monthlyOpeningOverrides || {};
+        saveMonthlyOpeningsToStorage();
         state.budgets = data.budgets || {};
         state.paymentCommitments = data.paymentCommitments || {};
         state.familyIncomeGoal = data.familyIncomeGoal || { usd: 0, ves: 0 };
@@ -1120,6 +1154,7 @@ function pushToCloud(){
        honestamente que son viejos, para que otros no los adopten por error. */
     initialBalanceUpdatedAt: state.initialBalanceUpdatedAt || null,
     initialBalanceLocked: state.initialBalanceLocked || false,
+    monthlyOpeningOverrides: state.monthlyOpeningOverrides,
     budgets: state.budgets,
     paymentCommitments: state.paymentCommitments,
     currentSavings: state.currentSavings,
@@ -1683,24 +1718,35 @@ function getDailyBalances(){
     dailyNet[tx.date].count += 1;
   });
 
-  var runningUSD = round2(state.initialBalance.usd), runningVES = round2(state.initialBalance.ves);
-  var sortedDates = state.transactions.map(function(t){ return t.date; }).sort();
-  var earliestDate = sortedDates.length ? sortedDates[0] : monthStart;
-  var openingRate = getRateForDate(earliestDate < monthStart ? earliestDate : monthStart);
-  var runningCombined = round2(state.initialBalance.usd + (openingRate ? state.initialBalance.ves / openingRate : 0));
+  var monthOverride = state.monthlyOpeningOverrides[monthKeyFromDate(monthStart)];
+  var runningUSD, runningVES, runningCombined;
+  if (monthOverride){
+    /* Mes anclado a mano: no se deriva del histórico ni del Saldo Inicial global. */
+    runningUSD = round2(Number(monthOverride.usd) || 0);
+    runningVES = round2(Number(monthOverride.ves) || 0);
+    var overrideRate = getRateForDate(monthStart);
+    runningCombined = round2(runningUSD + (overrideRate ? runningVES / overrideRate : 0));
+  } else {
+    runningUSD = round2(state.initialBalance.usd);
+    runningVES = round2(state.initialBalance.ves);
+    var sortedDates = state.transactions.map(function(t){ return t.date; }).sort();
+    var earliestDate = sortedDates.length ? sortedDates[0] : monthStart;
+    var openingRate = getRateForDate(earliestDate < monthStart ? earliestDate : monthStart);
+    runningCombined = round2(state.initialBalance.usd + (openingRate ? state.initialBalance.ves / openingRate : 0));
 
-  var priorTx = state.transactions.filter(function(t){ return t.date < monthStart; }).sort(function(a,b){ return a.date < b.date ? -1 : 1; });
-  priorTx.forEach(function(tx){
-    var amt = signedAmount(tx);
-    if (tx.currency === 'USD'){
-      runningUSD = round2(runningUSD + amt);
-      runningCombined = round2(runningCombined + amt);
-    } else {
-      runningVES = round2(runningVES + amt);
-      var r = getRateForDate(tx.date);
-      if (r) runningCombined = round2(runningCombined + amt / r);
-    }
-  });
+    var priorTx = state.transactions.filter(function(t){ return t.date < monthStart; }).sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+    priorTx.forEach(function(tx){
+      var amt = signedAmount(tx);
+      if (tx.currency === 'USD'){
+        runningUSD = round2(runningUSD + amt);
+        runningCombined = round2(runningCombined + amt);
+      } else {
+        runningVES = round2(runningVES + amt);
+        var r = getRateForDate(tx.date);
+        if (r) runningCombined = round2(runningCombined + amt / r);
+      }
+    });
+  }
 
   var rows = [];
   for (var d = 1; d <= lastDay; d++){
@@ -1719,6 +1765,8 @@ function getDailyBalances(){
 function getMonthOpeningBalance(){
   var vd = getViewDate();
   var monthStart = vd.getFullYear() + '-' + pad2(vd.getMonth() + 1) + '-01';
+  var override = state.monthlyOpeningOverrides[monthKeyFromDate(monthStart)];
+  if (override) return { usd: Number(override.usd) || 0, ves: Number(override.ves) || 0 };
   var usd = state.initialBalance.usd, ves = state.initialBalance.ves;
   state.transactions.forEach(function(tx){
     if (tx.date < monthStart){
@@ -3065,6 +3113,19 @@ function renderMetasAjustes(){
   html += '  <input type="checkbox" id="balLockInput" ' + (state.initialBalanceLocked ? 'checked' : '') + ' onchange="toggleInitialBalanceLock()">';
   html += '  <span>🔒 Bloquear este saldo' + (state.initialBalanceLocked ? ' (bloqueado: este dispositivo ignora lo que llegue de otros)' : ' — evita que otro dispositivo con datos viejos lo sobrescriba') + '</span>';
   html += '</label>';
+
+  var vdAjustes = getViewDate();
+  var monthStartAjustes = vdAjustes.getFullYear() + '-' + pad2(vdAjustes.getMonth() + 1) + '-01';
+  var mkAjustes = monthKeyFromDate(monthStartAjustes);
+  var override = state.monthlyOpeningOverrides[mkAjustes];
+  html += '<div class="section-label" style="margin-top:22px">Saldo de Apertura de ' + esc(monthLabelFromKey(mkAjustes)) + '</div>';
+  html += '<div class="empty-note" style="padding-top:0">Por defecto, el saldo de apertura de cada mes se calcula solo (Saldo Inicial + movimientos anteriores a este mes). Si fijás un valor acá, este mes queda anclado a ese número y ya no se recalcula, aunque después cambies el Saldo Inicial o edites movimientos de otros meses.</div>';
+  html += '<div class="form-group"><label class="form-label">Apertura en USD</label><input class="input" type="number" inputmode="decimal" id="monthOpenUsdInput" value="' + (override ? override.usd : '') + '" placeholder="Automático"></div>';
+  html += '<div class="form-group"><label class="form-label">Apertura en Bs.</label><input class="input" type="number" inputmode="decimal" id="monthOpenVesInput" value="' + (override ? override.ves : '') + '" placeholder="Automático"></div>';
+  html += '<button class="primary-btn" onclick="saveMonthOpeningOverride(document.getElementById(\'monthOpenUsdInput\').value, document.getElementById(\'monthOpenVesInput\').value)">Guardar apertura de ' + esc(monthLabelFromKey(mkAjustes)) + '</button>';
+  if (override){
+    html += '<button class="primary-btn" style="background:var(--surface-2);color:var(--text-dim);border:1px solid var(--line);margin-top:8px" onclick="clearMonthOpeningOverride()">Quitar override (volver a cálculo automático)</button>';
+  }
   return html;
 }
 
@@ -3201,6 +3262,7 @@ loadData();
 loadCachedRate();
 loadCachedHistory();
 loadInitialBalance();
+loadMonthlyOpenings();
 loadPin();
 loadCustomCategories();
 loadFamilyIncomeGoal();
