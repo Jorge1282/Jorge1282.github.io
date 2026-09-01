@@ -3068,21 +3068,26 @@ function renderPaymentCategoryBlock(catId, defaultExpandIndex, monthStart, nextM
   var list = (state.paymentCommitments[catId] || [])
     .filter(function(p){ return !monthStart || !p.date || (p.date >= monthStart && p.date < nextMonthStart); })
     .slice().sort(function(a,b){ return a.date < b.date ? -1 : 1; });
-  var subUSDTotal = 0, hasUnconverted = false;
-  list.forEach(function(p){
+  /* El badge junto al nombre de la categoría es la DEUDA PENDIENTE, no la suma
+     bruta: se excluyen los pagos con p.paid === true. Como esto se recalcula
+     acá adentro en cada render(), y togglePaymentPaid() ya llama a render()
+     al alternar el estado, el badge se actualiza solo al marcar/desmarcar un
+     pago como pagado — no hace falta ningún cálculo aparte ni evento extra. */
+  var pendingUSDTotal = 0, hasUnconverted = false;
+  list.filter(function(p){ return !p.paid; }).forEach(function(p){
     var amt = Number(p.amount) || 0;
     if (!amt) return;
-    if (p.currency === 'USD'){ subUSDTotal += amt; }
+    if (p.currency === 'USD'){ pendingUSDTotal += amt; }
     else {
       var r = getRateForDate(p.date);
-      if (r) subUSDTotal += amt / r; else hasUnconverted = true;
+      if (r) pendingUSDTotal += amt / r; else hasUnconverted = true;
     }
   });
 
   html += '<button class="group-header group-header-btn" onclick="toggleGroup(\'' + key + '\',' + defaultExpandIndex + ')">';
   html += '  <span class="group-title-wrap"><span class="group-chevron ' + (expanded?'open':'') + '">' + ICONS.chevronDown + '</span><span class="group-title">' + esc(label) + '</span></span>';
-  if (subUSDTotal > 0){
-    html += '  <span class="group-net-badge">' + fmt(subUSDTotal,'USD') + (hasUnconverted ? ' +' : '') + '</span>';
+  if (pendingUSDTotal > 0){
+    html += '  <span class="group-net-badge">' + fmt(pendingUSDTotal,'USD') + (hasUnconverted ? ' +' : '') + '</span>';
   } else {
     html += '  <span class="group-net-badge">' + list.length + ' fecha' + (list.length===1?'':'s') + '</span>';
   }
