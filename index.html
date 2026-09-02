@@ -14,6 +14,7 @@
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 <style>
   :root {
@@ -223,7 +224,7 @@ var FIREBASE_CONFIG = {
   messagingSenderId: "68767776517",
   appId: "1:68767776517:web:b424c02fa3bd3a5006816c"
 };
-var FAMILY_CODE = "FAMILIAOSORIO";
+var FAMILY_CODE = "48EX8YJFW4MM";
 /* ================================================================= */
 
 var DEFAULT_EXPENSE_CATEGORIES = [
@@ -1105,6 +1106,11 @@ function initFirebaseSync(){
     firebase.initializeApp(FIREBASE_CONFIG);
     var db = firebase.firestore();
     familyDocRef = db.collection('tu_bolsillo_app').doc(FAMILY_CODE);
+    /* Autenticacion anonima requerida por las reglas de Firestore
+       (allow read, write: if request.auth != null). No pide login
+       visible al usuario, solo evita que scripts externos ataquen
+       la API de Firestore directamente sin pasar por esta app. */
+    firebase.auth().signInAnonymously().then(function(){
     fbReady = true;
     familyDocRef.onSnapshot(function(snap){
       if (snap.exists){
@@ -1169,6 +1175,11 @@ function initFirebaseSync(){
       }
     }, function(err){
       console.error('Firestore sync error', err);
+      state.syncStatus = 'error';
+      render();
+    });
+    }).catch(function(error){
+      console.error('Firebase Auth error (signInAnonymously)', error);
       state.syncStatus = 'error';
       render();
     });
